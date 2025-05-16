@@ -1,0 +1,8664 @@
+# data
+
+
+```python
+%load_ext autoreload
+%autoreload 2
+import importlib
+from importlib import reload  
+  
+import monotonic
+import utils
+from train import execute_model_evaluation
+from train_config import FlatACLConfig
+import train_config
+import data_manager
+from data_manager import DatasetManager
+import metrics
+from dataclasses import replace
+
+reload(utils)
+reload(monotonic)
+reload(train_config)
+
+# Initialize the data manager
+data_mgr = DatasetManager(device='cuda')
+
+# Load a synthetic dataset
+data_mgr.load_trajectory('lorenz96', steps=18999, dt=1e-2) # 50399
+# SCALE = False
+# trajectory = utils.generate_trajectory('lorenz',steps=52200, dt=1e-2) 
+# trajectory = utils.generate_hyperchaotic_rossler(steps=12000, dt=1e-3)
+# trajectory_2 = utils.generate_henon(steps=52000) 
+```
+
+## Seq=336
+
+### EigenACL
+
+#### pred=96
+
+
+```python
+from monotonic import DynamicTanh
+import torch.nn as nn
+
+importlib.reload(monotonic)
+importlib.reload(train_config) 
+cfg = train_config.FlatACLConfig(  # original householder 
+    seq_len=336,
+    pred_len=96,
+    channels=data_mgr.datasets['lorenz96']['channels'],# data_mgr.channels,              # ← number of features in your data
+    batch_size=128,
+    learning_rate=9e-4, 
+    seeds=[1955, 7, 20],  
+    epochs=50, 
+    dim_hidden=128,
+    dim_augment=128, 
+    ablate_no_koopman=False,
+    use_complex_eigenvalues=True,
+    second_delay_use_shift=True,
+    ablate_rotate_back_Koopman=True, 
+    ablate_shift_inside_scale=False,
+    householder_reflects_latent = 2,
+    householder_reflects_data = 4,
+    mixing_strategy='delay_only', 
+    loss_backward_weights = [0.0, 0.0, 1.0, 0.0, 0.0],
+    loss_validate_weights = [0.0, 0.0, 1.0, 0.0, 0.0],
+    ablate_deterministic_y0=False, 
+)
+cfg.x_to_z_delay.enable_magnitudes = [False, True]
+cfg.x_to_z_delay.spectral_flags_scale_shift = [True, False]
+cfg.x_to_z_delay.spectral_flags_magnitudes = [False, True]
+cfg.x_to_z_delay.spectral_flags_hidden_layers = [False, False]
+cfg.x_to_z_delay.activations_scale_shift = ["relu6", "dynamic_tanh"]
+cfg.x_to_z_delay.activations_hidden_layers = [nn.ELU, nn.LogSigmoid]
+
+cfg.x_to_z_deri.enable_magnitudes = [False, True]
+cfg.x_to_z_deri.spectral_flags_scale_shift = [True, False]
+cfg.x_to_z_deri.spectral_flags_magnitudes = [False, True]
+cfg.x_to_z_deri.spectral_flags_hidden_layers = [False, False]
+cfg.x_to_z_deri.activations_scale_shift = ["relu6", "dynamic_tanh"]
+cfg.x_to_z_deri.activations_hidden_layers = [nn.ELU, nn.LogSigmoid]
+
+cfg.z_to_x_main.enable_magnitudes = [False, True]
+cfg.z_to_x_main.spectral_flags_scale_shift = [True, False]
+cfg.z_to_x_main.spectral_flags_magnitudes = [False, True]
+cfg.z_to_x_main.spectral_flags_hidden_layers = [False, False]
+cfg.z_to_x_main.activations_scale_shift = ["relu6", "dynamic_tanh"]
+cfg.z_to_x_main.activations_hidden_layers = [nn.ELU, nn.LogSigmoid]
+
+cfg.z_push_to_z.enable_magnitudes = [False, True]
+cfg.z_push_to_z.spectral_flags_scale_shift = [True, False]
+cfg.z_push_to_z.spectral_flags_magnitudes = [False, True]
+cfg.z_push_to_z.spectral_flags_hidden_layers = [False, False]
+cfg.z_push_to_z.activations_scale_shift = ["relu6", "dynamic_tanh"]
+cfg.z_push_to_z.activations_hidden_layers = [nn.ELU, nn.LogSigmoid]
+
+cfg.z_to_y_main.enable_magnitudes = [False, True]
+cfg.z_to_y_main.spectral_flags_scale_shift = [True, False]
+cfg.z_to_y_main.spectral_flags_magnitudes = [False, True]
+cfg.z_to_y_main.spectral_flags_hidden_layers = [False, False]
+cfg.z_to_y_main.activations_scale_shift = ["relu6", "dynamic_tanh"]
+cfg.z_to_y_main.activations_hidden_layers = [nn.ELU, nn.LogSigmoid]
+exp = execute_model_evaluation('lorenz96', cfg, data_mgr, scale=False)
+```
+
+    Shape of training data: torch.Size([13300, 6])
+    Shape of validation data: torch.Size([1900, 6])
+    Shape of testing data: torch.Size([3800, 6])
+    global_std.shape: torch.Size([6])
+    Global Std for lorenz96: tensor([3.6750, 3.6678, 3.7240, 3.7347, 3.8038, 3.5588], device='cuda:0')
+    Train set sample shapes: torch.Size([336, 6]), torch.Size([96, 6])
+    Validation set sample shapes: torch.Size([336, 6]), torch.Size([96, 6])
+    Test set data shapes: torch.Size([3800, 6]), torch.Size([3800, 6])
+    Number of batches in train_loader: 101
+    Batch 0: Data shape torch.Size([128, 336, 6]), Target shape torch.Size([128, 96, 6])
+    
+    ==================================================
+    Data Preparation: lorenz96
+    ==================================================
+    Sequence Length: 336
+    Prediction Length: 96
+    Batch Size: 128
+    Scaling: No
+    Train Split: 0.7
+    Val Split: 0.8
+    Training Batches: 101
+    Validation Batches: 12
+    Test Batches: 27
+    ==================================================
+    
+    ==================================================
+     Running experiment with seed 1955 (1/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 9.2425, mae: 2.3084, huber: 1.8637, swd: 3.8126, ept: 45.7153
+    Epoch [1/50], Val Losses: mse: 8.0112, mae: 2.1072, huber: 1.6686, swd: 2.3040, ept: 57.7950
+    Epoch [1/50], Test Losses: mse: 7.7938, mae: 2.0393, huber: 1.6055, swd: 2.2373, ept: 58.4333
+      Epoch 1 composite train-obj: 1.863740
+            Val objective improved inf → 1.6686, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 4.5232, mae: 1.4897, huber: 1.0822, swd: 1.0693, ept: 73.9367
+    Epoch [2/50], Val Losses: mse: 7.3908, mae: 1.9457, huber: 1.5185, swd: 1.7274, ept: 66.7979
+    Epoch [2/50], Test Losses: mse: 6.7564, mae: 1.8172, huber: 1.3998, swd: 1.6375, ept: 67.9886
+      Epoch 2 composite train-obj: 1.082189
+            Val objective improved 1.6686 → 1.5185, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 3.1489, mae: 1.2113, huber: 0.8245, swd: 0.6718, ept: 81.9124
+    Epoch [3/50], Val Losses: mse: 7.4795, mae: 1.9309, huber: 1.5084, swd: 1.7142, ept: 66.3367
+    Epoch [3/50], Test Losses: mse: 6.3686, mae: 1.7413, huber: 1.3290, swd: 1.5579, ept: 69.3792
+      Epoch 3 composite train-obj: 0.824499
+            Val objective improved 1.5185 → 1.5084, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 2.3809, mae: 1.0449, huber: 0.6731, swd: 0.4875, ept: 85.8931
+    Epoch [4/50], Val Losses: mse: 7.2020, mae: 1.8644, huber: 1.4468, swd: 1.3567, ept: 69.9411
+    Epoch [4/50], Test Losses: mse: 6.0586, mae: 1.6574, huber: 1.2517, swd: 1.2438, ept: 72.8882
+      Epoch 4 composite train-obj: 0.673054
+            Val objective improved 1.5084 → 1.4468, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 1.9204, mae: 0.9388, huber: 0.5775, swd: 0.3821, ept: 88.3849
+    Epoch [5/50], Val Losses: mse: 6.8295, mae: 1.8279, huber: 1.4102, swd: 1.2794, ept: 69.9283
+    Epoch [5/50], Test Losses: mse: 5.9351, mae: 1.6674, huber: 1.2580, swd: 1.2234, ept: 73.0126
+      Epoch 5 composite train-obj: 0.577539
+            Val objective improved 1.4468 → 1.4102, saving checkpoint.
+    Epoch [6/50], Train Losses: mse: 1.5403, mae: 0.8383, huber: 0.4897, swd: 0.3037, ept: 90.4005
+    Epoch [6/50], Val Losses: mse: 6.9409, mae: 1.8138, huber: 1.4014, swd: 1.2786, ept: 70.3406
+    Epoch [6/50], Test Losses: mse: 5.9233, mae: 1.6421, huber: 1.2381, swd: 1.1503, ept: 73.4043
+      Epoch 6 composite train-obj: 0.489724
+            Val objective improved 1.4102 → 1.4014, saving checkpoint.
+    Epoch [7/50], Train Losses: mse: 1.2888, mae: 0.7669, huber: 0.4284, swd: 0.2475, ept: 91.6228
+    Epoch [7/50], Val Losses: mse: 6.8947, mae: 1.7943, huber: 1.3832, swd: 1.2908, ept: 71.5040
+    Epoch [7/50], Test Losses: mse: 5.8961, mae: 1.6232, huber: 1.2223, swd: 1.1797, ept: 74.0415
+      Epoch 7 composite train-obj: 0.428355
+            Val objective improved 1.4014 → 1.3832, saving checkpoint.
+    Epoch [8/50], Train Losses: mse: 1.1450, mae: 0.7263, huber: 0.3934, swd: 0.2194, ept: 92.3585
+    Epoch [8/50], Val Losses: mse: 6.8566, mae: 1.8001, huber: 1.3881, swd: 1.2820, ept: 72.2412
+    Epoch [8/50], Test Losses: mse: 5.6515, mae: 1.5747, huber: 1.1780, swd: 1.1755, ept: 75.5485
+      Epoch 8 composite train-obj: 0.393416
+            No improvement (1.3881), counter 1/5
+    Epoch [9/50], Train Losses: mse: 0.9407, mae: 0.6568, huber: 0.3361, swd: 0.1777, ept: 93.3465
+    Epoch [9/50], Val Losses: mse: 6.9330, mae: 1.8094, huber: 1.3958, swd: 1.2639, ept: 72.4399
+    Epoch [9/50], Test Losses: mse: 5.5958, mae: 1.5744, huber: 1.1756, swd: 1.1417, ept: 75.4283
+      Epoch 9 composite train-obj: 0.336130
+            No improvement (1.3958), counter 2/5
+    Epoch [10/50], Train Losses: mse: 0.8202, mae: 0.6165, huber: 0.3031, swd: 0.1540, ept: 93.8950
+    Epoch [10/50], Val Losses: mse: 6.8897, mae: 1.7958, huber: 1.3851, swd: 1.2727, ept: 71.8214
+    Epoch [10/50], Test Losses: mse: 5.6483, mae: 1.5643, huber: 1.1707, swd: 1.1600, ept: 75.5430
+      Epoch 10 composite train-obj: 0.303107
+            No improvement (1.3851), counter 3/5
+    Epoch [11/50], Train Losses: mse: 0.7089, mae: 0.5753, huber: 0.2702, swd: 0.1338, ept: 94.2887
+    Epoch [11/50], Val Losses: mse: 6.9295, mae: 1.8073, huber: 1.3965, swd: 1.2818, ept: 72.1683
+    Epoch [11/50], Test Losses: mse: 5.6525, mae: 1.5653, huber: 1.1714, swd: 1.1699, ept: 76.0081
+      Epoch 11 composite train-obj: 0.270197
+            No improvement (1.3965), counter 4/5
+    Epoch [12/50], Train Losses: mse: 0.6280, mae: 0.5426, huber: 0.2449, swd: 0.1171, ept: 94.6217
+    Epoch [12/50], Val Losses: mse: 7.0297, mae: 1.8238, huber: 1.4126, swd: 1.2615, ept: 71.9082
+    Epoch [12/50], Test Losses: mse: 5.5996, mae: 1.5525, huber: 1.1604, swd: 1.1382, ept: 76.2644
+      Epoch 12 composite train-obj: 0.244902
+    Epoch [12/50], Test Losses: mse: 5.8963, mae: 1.6233, huber: 1.2223, swd: 1.1798, ept: 74.0368
+    Best round's Test MSE: 5.8961, MAE: 1.6232, SWD: 1.1797
+    Best round's Validation MSE: 6.8947, MAE: 1.7943, SWD: 1.2908
+    Best round's Test verification MSE : 5.8963, MAE: 1.6233, SWD: 1.1798
+    Time taken: 37.83 seconds
+    
+    ==================================================
+     Running experiment with seed 7 (2/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 8.9764, mae: 2.2719, huber: 1.8280, swd: 3.5849, ept: 47.2813
+    Epoch [1/50], Val Losses: mse: 7.8202, mae: 2.0784, huber: 1.6408, swd: 2.0070, ept: 58.3990
+    Epoch [1/50], Test Losses: mse: 7.8668, mae: 2.0514, huber: 1.6174, swd: 2.0412, ept: 58.0211
+      Epoch 1 composite train-obj: 1.827995
+            Val objective improved inf → 1.6408, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 4.5575, mae: 1.4977, huber: 1.0902, swd: 1.0949, ept: 73.5855
+    Epoch [2/50], Val Losses: mse: 7.6125, mae: 1.9650, huber: 1.5379, swd: 1.5689, ept: 65.8433
+    Epoch [2/50], Test Losses: mse: 6.7433, mae: 1.8230, huber: 1.4038, swd: 1.5396, ept: 66.9574
+      Epoch 2 composite train-obj: 1.090185
+            Val objective improved 1.6408 → 1.5379, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 3.1090, mae: 1.2128, huber: 0.8257, swd: 0.6982, ept: 81.3716
+    Epoch [3/50], Val Losses: mse: 7.6044, mae: 1.9231, huber: 1.5026, swd: 1.4225, ept: 67.9310
+    Epoch [3/50], Test Losses: mse: 6.4233, mae: 1.7445, huber: 1.3327, swd: 1.4714, ept: 69.4700
+      Epoch 3 composite train-obj: 0.825654
+            Val objective improved 1.5379 → 1.5026, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 2.3174, mae: 1.0380, huber: 0.6660, swd: 0.5012, ept: 85.7811
+    Epoch [4/50], Val Losses: mse: 7.4202, mae: 1.8994, huber: 1.4782, swd: 1.3372, ept: 69.5112
+    Epoch [4/50], Test Losses: mse: 6.3840, mae: 1.7386, huber: 1.3249, swd: 1.3338, ept: 70.8409
+      Epoch 4 composite train-obj: 0.666014
+            Val objective improved 1.5026 → 1.4782, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 1.8004, mae: 0.9074, huber: 0.5505, swd: 0.3740, ept: 88.7140
+    Epoch [5/50], Val Losses: mse: 7.7724, mae: 1.9233, huber: 1.5059, swd: 1.3885, ept: 70.0259
+    Epoch [5/50], Test Losses: mse: 6.0244, mae: 1.6550, huber: 1.2509, swd: 1.2595, ept: 72.9394
+      Epoch 5 composite train-obj: 0.550454
+            No improvement (1.5059), counter 1/5
+    Epoch [6/50], Train Losses: mse: 1.4894, mae: 0.8251, huber: 0.4784, swd: 0.3035, ept: 90.4424
+    Epoch [6/50], Val Losses: mse: 7.1986, mae: 1.8593, huber: 1.4441, swd: 1.4046, ept: 70.6485
+    Epoch [6/50], Test Losses: mse: 5.8094, mae: 1.6201, huber: 1.2186, swd: 1.2852, ept: 73.7180
+      Epoch 6 composite train-obj: 0.478444
+            Val objective improved 1.4782 → 1.4441, saving checkpoint.
+    Epoch [7/50], Train Losses: mse: 1.2636, mae: 0.7614, huber: 0.4235, swd: 0.2602, ept: 91.6957
+    Epoch [7/50], Val Losses: mse: 7.4841, mae: 1.8721, huber: 1.4603, swd: 1.4016, ept: 71.2655
+    Epoch [7/50], Test Losses: mse: 5.7967, mae: 1.6029, huber: 1.2049, swd: 1.2476, ept: 74.6789
+      Epoch 7 composite train-obj: 0.423474
+            No improvement (1.4603), counter 1/5
+    Epoch [8/50], Train Losses: mse: 1.0458, mae: 0.6928, huber: 0.3658, swd: 0.2082, ept: 92.8143
+    Epoch [8/50], Val Losses: mse: 7.3222, mae: 1.8427, huber: 1.4332, swd: 1.3152, ept: 71.5379
+    Epoch [8/50], Test Losses: mse: 5.8931, mae: 1.6121, huber: 1.2133, swd: 1.2136, ept: 74.7506
+      Epoch 8 composite train-obj: 0.365848
+            Val objective improved 1.4441 → 1.4332, saving checkpoint.
+    Epoch [9/50], Train Losses: mse: 0.9222, mae: 0.6536, huber: 0.3329, swd: 0.1841, ept: 93.4344
+    Epoch [9/50], Val Losses: mse: 7.3016, mae: 1.8547, huber: 1.4398, swd: 1.4013, ept: 71.6962
+    Epoch [9/50], Test Losses: mse: 5.7590, mae: 1.5927, huber: 1.1955, swd: 1.2130, ept: 75.0083
+      Epoch 9 composite train-obj: 0.332938
+            No improvement (1.4398), counter 1/5
+    Epoch [10/50], Train Losses: mse: 0.7785, mae: 0.5997, huber: 0.2898, swd: 0.1533, ept: 93.9937
+    Epoch [10/50], Val Losses: mse: 7.7028, mae: 1.9136, huber: 1.4989, swd: 1.4417, ept: 70.8114
+    Epoch [10/50], Test Losses: mse: 5.9557, mae: 1.6316, huber: 1.2284, swd: 1.2035, ept: 75.1741
+      Epoch 10 composite train-obj: 0.289797
+            No improvement (1.4989), counter 2/5
+    Epoch [11/50], Train Losses: mse: 0.7196, mae: 0.5805, huber: 0.2742, swd: 0.1386, ept: 94.2991
+    Epoch [11/50], Val Losses: mse: 7.3584, mae: 1.8553, huber: 1.4441, swd: 1.4129, ept: 71.9463
+    Epoch [11/50], Test Losses: mse: 5.7159, mae: 1.5812, huber: 1.1859, swd: 1.2148, ept: 75.7458
+      Epoch 11 composite train-obj: 0.274249
+            No improvement (1.4441), counter 3/5
+    Epoch [12/50], Train Losses: mse: 0.6183, mae: 0.5403, huber: 0.2428, swd: 0.1169, ept: 94.7178
+    Epoch [12/50], Val Losses: mse: 7.3742, mae: 1.8410, huber: 1.4322, swd: 1.4142, ept: 72.0228
+    Epoch [12/50], Test Losses: mse: 5.7566, mae: 1.5782, huber: 1.1844, swd: 1.2015, ept: 75.7130
+      Epoch 12 composite train-obj: 0.242816
+            Val objective improved 1.4332 → 1.4322, saving checkpoint.
+    Epoch [13/50], Train Losses: mse: 0.5677, mae: 0.5208, huber: 0.2276, swd: 0.1094, ept: 94.9239
+    Epoch [13/50], Val Losses: mse: 7.3162, mae: 1.8505, huber: 1.4373, swd: 1.4881, ept: 72.1132
+    Epoch [13/50], Test Losses: mse: 5.8320, mae: 1.5976, huber: 1.2023, swd: 1.3031, ept: 75.3115
+      Epoch 13 composite train-obj: 0.227646
+            No improvement (1.4373), counter 1/5
+    Epoch [14/50], Train Losses: mse: 0.4838, mae: 0.4812, huber: 0.1988, swd: 0.0925, ept: 95.1905
+    Epoch [14/50], Val Losses: mse: 7.4326, mae: 1.8450, huber: 1.4357, swd: 1.4262, ept: 72.3125
+    Epoch [14/50], Test Losses: mse: 5.8727, mae: 1.5942, huber: 1.1999, swd: 1.1879, ept: 75.2659
+      Epoch 14 composite train-obj: 0.198773
+            No improvement (1.4357), counter 2/5
+    Epoch [15/50], Train Losses: mse: 0.4322, mae: 0.4570, huber: 0.1814, swd: 0.0801, ept: 95.3626
+    Epoch [15/50], Val Losses: mse: 7.3244, mae: 1.8387, huber: 1.4293, swd: 1.4042, ept: 72.6120
+    Epoch [15/50], Test Losses: mse: 5.7578, mae: 1.5793, huber: 1.1854, swd: 1.2121, ept: 75.9182
+      Epoch 15 composite train-obj: 0.181393
+            Val objective improved 1.4322 → 1.4293, saving checkpoint.
+    Epoch [16/50], Train Losses: mse: 0.4249, mae: 0.4551, huber: 0.1798, swd: 0.0778, ept: 95.4323
+    Epoch [16/50], Val Losses: mse: 7.4572, mae: 1.8474, huber: 1.4398, swd: 1.3999, ept: 72.2199
+    Epoch [16/50], Test Losses: mse: 5.8266, mae: 1.5853, huber: 1.1905, swd: 1.1961, ept: 76.0113
+      Epoch 16 composite train-obj: 0.179792
+            No improvement (1.4398), counter 1/5
+    Epoch [17/50], Train Losses: mse: 0.3762, mae: 0.4298, huber: 0.1621, swd: 0.0699, ept: 95.5818
+    Epoch [17/50], Val Losses: mse: 7.5079, mae: 1.8543, huber: 1.4466, swd: 1.4837, ept: 72.2255
+    Epoch [17/50], Test Losses: mse: 5.9022, mae: 1.5946, huber: 1.2010, swd: 1.2370, ept: 75.8037
+      Epoch 17 composite train-obj: 0.162148
+            No improvement (1.4466), counter 2/5
+    Epoch [18/50], Train Losses: mse: 0.3450, mae: 0.4139, huber: 0.1511, swd: 0.0651, ept: 95.6601
+    Epoch [18/50], Val Losses: mse: 7.4511, mae: 1.8453, huber: 1.4366, swd: 1.4539, ept: 72.4007
+    Epoch [18/50], Test Losses: mse: 5.7484, mae: 1.5745, huber: 1.1814, swd: 1.1989, ept: 76.5702
+      Epoch 18 composite train-obj: 0.151078
+            No improvement (1.4366), counter 3/5
+    Epoch [19/50], Train Losses: mse: 0.3111, mae: 0.3955, huber: 0.1386, swd: 0.0596, ept: 95.7845
+    Epoch [19/50], Val Losses: mse: 7.4035, mae: 1.8452, huber: 1.4388, swd: 1.4393, ept: 72.4023
+    Epoch [19/50], Test Losses: mse: 5.6968, mae: 1.5653, huber: 1.1729, swd: 1.2059, ept: 76.7256
+      Epoch 19 composite train-obj: 0.138629
+            No improvement (1.4388), counter 4/5
+    Epoch [20/50], Train Losses: mse: 0.2816, mae: 0.3773, huber: 0.1271, swd: 0.0534, ept: 95.8241
+    Epoch [20/50], Val Losses: mse: 7.5726, mae: 1.8589, huber: 1.4516, swd: 1.4618, ept: 72.2199
+    Epoch [20/50], Test Losses: mse: 5.7510, mae: 1.5735, huber: 1.1808, swd: 1.1755, ept: 76.3173
+      Epoch 20 composite train-obj: 0.127056
+    Epoch [20/50], Test Losses: mse: 5.7579, mae: 1.5793, huber: 1.1854, swd: 1.2121, ept: 75.9182
+    Best round's Test MSE: 5.7578, MAE: 1.5793, SWD: 1.2121
+    Best round's Validation MSE: 7.3244, MAE: 1.8387, SWD: 1.4042
+    Best round's Test verification MSE : 5.7579, MAE: 1.5793, SWD: 1.2121
+    Time taken: 63.69 seconds
+    
+    ==================================================
+     Running experiment with seed 20 (3/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 9.2141, mae: 2.3085, huber: 1.8631, swd: 3.5716, ept: 46.1137
+    Epoch [1/50], Val Losses: mse: 8.0380, mae: 2.0868, huber: 1.6506, swd: 1.8670, ept: 59.8945
+    Epoch [1/50], Test Losses: mse: 7.8273, mae: 2.0258, huber: 1.5958, swd: 1.8638, ept: 59.8280
+      Epoch 1 composite train-obj: 1.863126
+            Val objective improved inf → 1.6506, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 4.6293, mae: 1.5128, huber: 1.1039, swd: 1.0481, ept: 73.2671
+    Epoch [2/50], Val Losses: mse: 7.3268, mae: 1.9310, huber: 1.5051, swd: 1.3764, ept: 65.0033
+    Epoch [2/50], Test Losses: mse: 6.8634, mae: 1.8567, huber: 1.4348, swd: 1.3441, ept: 65.7381
+      Epoch 2 composite train-obj: 1.103936
+            Val objective improved 1.6506 → 1.5051, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 3.1600, mae: 1.2181, huber: 0.8311, swd: 0.6356, ept: 81.1662
+    Epoch [3/50], Val Losses: mse: 7.1801, mae: 1.8871, huber: 1.4652, swd: 1.3713, ept: 68.1726
+    Epoch [3/50], Test Losses: mse: 6.4125, mae: 1.7531, huber: 1.3400, swd: 1.2569, ept: 69.5032
+      Epoch 3 composite train-obj: 0.831090
+            Val objective improved 1.5051 → 1.4652, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 2.4065, mae: 1.0520, huber: 0.6797, swd: 0.4637, ept: 85.3978
+    Epoch [4/50], Val Losses: mse: 7.5976, mae: 1.9537, huber: 1.5296, swd: 1.6936, ept: 67.8151
+    Epoch [4/50], Test Losses: mse: 6.3639, mae: 1.7308, huber: 1.3193, swd: 1.5155, ept: 70.3616
+      Epoch 4 composite train-obj: 0.679693
+            No improvement (1.5296), counter 1/5
+    Epoch [5/50], Train Losses: mse: 1.8328, mae: 0.9144, huber: 0.5568, swd: 0.3477, ept: 88.4339
+    Epoch [5/50], Val Losses: mse: 6.8951, mae: 1.8279, huber: 1.4118, swd: 1.2629, ept: 70.6751
+    Epoch [5/50], Test Losses: mse: 5.7426, mae: 1.6064, huber: 1.2056, swd: 1.1154, ept: 73.8232
+      Epoch 5 composite train-obj: 0.556848
+            Val objective improved 1.4652 → 1.4118, saving checkpoint.
+    Epoch [6/50], Train Losses: mse: 1.4530, mae: 0.8150, huber: 0.4698, swd: 0.2753, ept: 90.4706
+    Epoch [6/50], Val Losses: mse: 6.7587, mae: 1.7873, huber: 1.3761, swd: 1.2035, ept: 71.8012
+    Epoch [6/50], Test Losses: mse: 5.6386, mae: 1.5788, huber: 1.1794, swd: 1.0611, ept: 74.9691
+      Epoch 6 composite train-obj: 0.469796
+            Val objective improved 1.4118 → 1.3761, saving checkpoint.
+    Epoch [7/50], Train Losses: mse: 1.2606, mae: 0.7618, huber: 0.4236, swd: 0.2349, ept: 91.5527
+    Epoch [7/50], Val Losses: mse: 6.8452, mae: 1.7859, huber: 1.3750, swd: 1.2072, ept: 73.0042
+    Epoch [7/50], Test Losses: mse: 5.7159, mae: 1.5838, huber: 1.1860, swd: 1.0591, ept: 74.7819
+      Epoch 7 composite train-obj: 0.423555
+            Val objective improved 1.3761 → 1.3750, saving checkpoint.
+    Epoch [8/50], Train Losses: mse: 1.0246, mae: 0.6863, huber: 0.3604, swd: 0.1879, ept: 92.7756
+    Epoch [8/50], Val Losses: mse: 6.8996, mae: 1.8213, huber: 1.4072, swd: 1.3740, ept: 71.5771
+    Epoch [8/50], Test Losses: mse: 5.7541, mae: 1.5993, huber: 1.1992, swd: 1.2037, ept: 74.6629
+      Epoch 8 composite train-obj: 0.360411
+            No improvement (1.4072), counter 1/5
+    Epoch [9/50], Train Losses: mse: 0.8743, mae: 0.6349, huber: 0.3182, swd: 0.1576, ept: 93.4968
+    Epoch [9/50], Val Losses: mse: 7.0939, mae: 1.8357, huber: 1.4223, swd: 1.2208, ept: 71.2719
+    Epoch [9/50], Test Losses: mse: 5.8493, mae: 1.6018, huber: 1.2022, swd: 1.0702, ept: 75.3967
+      Epoch 9 composite train-obj: 0.318217
+            No improvement (1.4223), counter 2/5
+    Epoch [10/50], Train Losses: mse: 0.7894, mae: 0.6064, huber: 0.2949, swd: 0.1439, ept: 93.9417
+    Epoch [10/50], Val Losses: mse: 6.8964, mae: 1.8001, huber: 1.3894, swd: 1.2617, ept: 72.5968
+    Epoch [10/50], Test Losses: mse: 5.6124, mae: 1.5646, huber: 1.1689, swd: 1.0898, ept: 75.7009
+      Epoch 10 composite train-obj: 0.294906
+            No improvement (1.3894), counter 3/5
+    Epoch [11/50], Train Losses: mse: 0.6849, mae: 0.5662, huber: 0.2631, swd: 0.1242, ept: 94.3808
+    Epoch [11/50], Val Losses: mse: 7.1281, mae: 1.8344, huber: 1.4228, swd: 1.2586, ept: 72.1738
+    Epoch [11/50], Test Losses: mse: 5.7012, mae: 1.5651, huber: 1.1705, swd: 1.0352, ept: 76.2491
+      Epoch 11 composite train-obj: 0.263144
+            No improvement (1.4228), counter 4/5
+    Epoch [12/50], Train Losses: mse: 0.6114, mae: 0.5368, huber: 0.2404, swd: 0.1106, ept: 94.6916
+    Epoch [12/50], Val Losses: mse: 6.8455, mae: 1.7956, huber: 1.3856, swd: 1.2588, ept: 72.4758
+    Epoch [12/50], Test Losses: mse: 5.6193, mae: 1.5611, huber: 1.1658, swd: 1.0329, ept: 76.0482
+      Epoch 12 composite train-obj: 0.240413
+    Epoch [12/50], Test Losses: mse: 5.7157, mae: 1.5837, huber: 1.1859, swd: 1.0592, ept: 74.7732
+    Best round's Test MSE: 5.7159, MAE: 1.5838, SWD: 1.0591
+    Best round's Validation MSE: 6.8452, MAE: 1.7859, SWD: 1.2072
+    Best round's Test verification MSE : 5.7157, MAE: 1.5837, SWD: 1.0592
+    Time taken: 43.86 seconds
+    
+    ==================================================
+    Experiment Summary (ACL_lorenz96_seq336_pred96_20250512_2232)
+    ==================================================
+    Number of runs: 3
+    Seeds: [1955, 7, 20]
+    
+    Test Performance at Best Validation (mean ± std):
+      mse: 5.7899 ± 0.0770
+      mae: 1.5954 ± 0.0197
+      huber: 1.1979 ± 0.0172
+      swd: 1.1503 ± 0.0658
+      ept: 74.9139 ± 0.7718
+      count: 12.0000 ± 0.0000
+    
+    Corresponding Validation Performance (mean ± std):
+      mse: 7.0214 ± 0.2152
+      mae: 1.8063 ± 0.0232
+      huber: 1.3958 ± 0.0239
+      swd: 1.3007 ± 0.0808
+      ept: 72.3734 ± 0.6353
+      count: 12.0000 ± 0.0000
+    ==================================================
+    Three seeds Time taken: 145.46 seconds
+    
+    Experiment complete: ACL_lorenz96_seq336_pred96_20250512_2232
+    Model: ACL
+    Dataset: lorenz96
+    Sequence Length: 336
+    Prediction Length: 96
+    Seeds: [1955, 7, 20]
+    
+
+#### pred=196
+
+
+```python
+from monotonic import DynamicTanh
+import torch.nn as nn
+
+importlib.reload(monotonic)
+importlib.reload(train_config) 
+cfg = train_config.FlatACLConfig(  # original householder 
+    seq_len=336,
+    pred_len=196,
+    channels=data_mgr.datasets['lorenz96']['channels'],# data_mgr.channels,              # ← number of features in your data
+    batch_size=128,
+    learning_rate=9e-4, 
+    seeds=[1955, 7, 20],  
+    epochs=50, 
+    dim_hidden=128,
+    dim_augment=128, 
+    ablate_no_koopman=False,
+    use_complex_eigenvalues=True,
+    second_delay_use_shift=True,
+    ablate_rotate_back_Koopman=True, 
+    ablate_shift_inside_scale=False,
+    householder_reflects_latent = 2,
+    householder_reflects_data = 4,
+    mixing_strategy='delay_only', 
+    loss_backward_weights = [0.0, 0.0, 1.0, 0.0, 0.0],
+    loss_validate_weights = [0.0, 0.0, 1.0, 0.0, 0.0],
+    ablate_deterministic_y0=False, 
+)
+cfg.x_to_z_delay.enable_magnitudes = [False, True]
+cfg.x_to_z_delay.spectral_flags_scale_shift = [True, False]
+cfg.x_to_z_delay.spectral_flags_magnitudes = [False, True]
+cfg.x_to_z_delay.spectral_flags_hidden_layers = [False, False]
+cfg.x_to_z_delay.activations_scale_shift = ["relu6", "dynamic_tanh"]
+cfg.x_to_z_delay.activations_hidden_layers = [nn.ELU, nn.LogSigmoid]
+
+cfg.x_to_z_deri.enable_magnitudes = [False, True]
+cfg.x_to_z_deri.spectral_flags_scale_shift = [True, False]
+cfg.x_to_z_deri.spectral_flags_magnitudes = [False, True]
+cfg.x_to_z_deri.spectral_flags_hidden_layers = [False, False]
+cfg.x_to_z_deri.activations_scale_shift = ["relu6", "dynamic_tanh"]
+cfg.x_to_z_deri.activations_hidden_layers = [nn.ELU, nn.LogSigmoid]
+
+cfg.z_to_x_main.enable_magnitudes = [False, True]
+cfg.z_to_x_main.spectral_flags_scale_shift = [True, False]
+cfg.z_to_x_main.spectral_flags_magnitudes = [False, True]
+cfg.z_to_x_main.spectral_flags_hidden_layers = [False, False]
+cfg.z_to_x_main.activations_scale_shift = ["relu6", "dynamic_tanh"]
+cfg.z_to_x_main.activations_hidden_layers = [nn.ELU, nn.LogSigmoid]
+
+cfg.z_push_to_z.enable_magnitudes = [False, True]
+cfg.z_push_to_z.spectral_flags_scale_shift = [True, False]
+cfg.z_push_to_z.spectral_flags_magnitudes = [False, True]
+cfg.z_push_to_z.spectral_flags_hidden_layers = [False, False]
+cfg.z_push_to_z.activations_scale_shift = ["relu6", "dynamic_tanh"]
+cfg.z_push_to_z.activations_hidden_layers = [nn.ELU, nn.LogSigmoid]
+
+cfg.z_to_y_main.enable_magnitudes = [False, True]
+cfg.z_to_y_main.spectral_flags_scale_shift = [True, False]
+cfg.z_to_y_main.spectral_flags_magnitudes = [False, True]
+cfg.z_to_y_main.spectral_flags_hidden_layers = [False, False]
+cfg.z_to_y_main.activations_scale_shift = ["relu6", "dynamic_tanh"]
+cfg.z_to_y_main.activations_hidden_layers = [nn.ELU, nn.LogSigmoid]
+exp = execute_model_evaluation('lorenz96', cfg, data_mgr, scale=False)
+```
+
+    Shape of training data: torch.Size([13300, 6])
+    Shape of validation data: torch.Size([1900, 6])
+    Shape of testing data: torch.Size([3800, 6])
+    global_std.shape: torch.Size([6])
+    Global Std for lorenz96: tensor([3.6750, 3.6678, 3.7240, 3.7347, 3.8038, 3.5588], device='cuda:0')
+    Train set sample shapes: torch.Size([336, 6]), torch.Size([196, 6])
+    Validation set sample shapes: torch.Size([336, 6]), torch.Size([196, 6])
+    Test set data shapes: torch.Size([3800, 6]), torch.Size([3800, 6])
+    Number of batches in train_loader: 100
+    Batch 0: Data shape torch.Size([128, 336, 6]), Target shape torch.Size([128, 196, 6])
+    
+    ==================================================
+    Data Preparation: lorenz96
+    ==================================================
+    Sequence Length: 336
+    Prediction Length: 196
+    Batch Size: 128
+    Scaling: No
+    Train Split: 0.7
+    Val Split: 0.8
+    Training Batches: 100
+    Validation Batches: 11
+    Test Batches: 26
+    ==================================================
+    
+    ==================================================
+     Running experiment with seed 1955 (1/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 10.8145, mae: 2.5710, huber: 2.1157, swd: 3.8082, ept: 53.3147
+    Epoch [1/50], Val Losses: mse: 10.6785, mae: 2.5388, huber: 2.0854, swd: 2.4679, ept: 60.3474
+    Epoch [1/50], Test Losses: mse: 10.7263, mae: 2.5045, huber: 2.0539, swd: 2.4075, ept: 66.6042
+      Epoch 1 composite train-obj: 2.115715
+            Val objective improved inf → 2.0854, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 7.1797, mae: 1.9651, huber: 1.5325, swd: 1.4518, ept: 98.0858
+    Epoch [2/50], Val Losses: mse: 10.6157, mae: 2.4839, huber: 2.0346, swd: 1.9844, ept: 78.0563
+    Epoch [2/50], Test Losses: mse: 10.0472, mae: 2.3580, huber: 1.9159, swd: 1.9223, ept: 82.5435
+      Epoch 2 composite train-obj: 1.532519
+            Val objective improved 2.0854 → 2.0346, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 5.6426, mae: 1.6854, huber: 1.2669, swd: 0.9775, ept: 118.6651
+    Epoch [3/50], Val Losses: mse: 10.7303, mae: 2.4603, huber: 2.0135, swd: 1.6111, ept: 81.2708
+    Epoch [3/50], Test Losses: mse: 9.8910, mae: 2.3043, huber: 1.8653, swd: 1.5651, ept: 88.3483
+      Epoch 3 composite train-obj: 1.266920
+            Val objective improved 2.0346 → 2.0135, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 4.5977, mae: 1.4919, huber: 1.0847, swd: 0.7244, ept: 132.1234
+    Epoch [4/50], Val Losses: mse: 10.6736, mae: 2.4313, huber: 1.9873, swd: 1.4796, ept: 84.7400
+    Epoch [4/50], Test Losses: mse: 9.9680, mae: 2.2891, huber: 1.8526, swd: 1.4296, ept: 90.9156
+      Epoch 4 composite train-obj: 1.084669
+            Val objective improved 2.0135 → 1.9873, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 3.7849, mae: 1.3372, huber: 0.9398, swd: 0.5533, ept: 142.7166
+    Epoch [5/50], Val Losses: mse: 11.0091, mae: 2.4543, huber: 2.0108, swd: 1.2365, ept: 86.3980
+    Epoch [5/50], Test Losses: mse: 10.3104, mae: 2.3174, huber: 1.8807, swd: 1.1781, ept: 92.0338
+      Epoch 5 composite train-obj: 0.939773
+            No improvement (2.0108), counter 1/5
+    Epoch [6/50], Train Losses: mse: 3.2084, mae: 1.2237, huber: 0.8346, swd: 0.4466, ept: 150.2929
+    Epoch [6/50], Val Losses: mse: 11.2037, mae: 2.4888, huber: 2.0441, swd: 1.3722, ept: 86.5677
+    Epoch [6/50], Test Losses: mse: 10.2707, mae: 2.3014, huber: 1.8665, swd: 1.2707, ept: 94.0040
+      Epoch 6 composite train-obj: 0.834560
+            No improvement (2.0441), counter 2/5
+    Epoch [7/50], Train Losses: mse: 2.7143, mae: 1.1209, huber: 0.7398, swd: 0.3651, ept: 157.4402
+    Epoch [7/50], Val Losses: mse: 11.4438, mae: 2.5004, huber: 2.0567, swd: 1.2527, ept: 86.9279
+    Epoch [7/50], Test Losses: mse: 10.6345, mae: 2.3381, huber: 1.9026, swd: 1.2319, ept: 94.5769
+      Epoch 7 composite train-obj: 0.739780
+            No improvement (2.0567), counter 3/5
+    Epoch [8/50], Train Losses: mse: 2.3245, mae: 1.0352, huber: 0.6617, swd: 0.2994, ept: 163.2756
+    Epoch [8/50], Val Losses: mse: 11.3919, mae: 2.4957, huber: 2.0524, swd: 1.2238, ept: 88.4745
+    Epoch [8/50], Test Losses: mse: 10.5802, mae: 2.3223, huber: 1.8881, swd: 1.1710, ept: 95.2116
+      Epoch 8 composite train-obj: 0.661698
+            No improvement (2.0524), counter 4/5
+    Epoch [9/50], Train Losses: mse: 2.0369, mae: 0.9692, huber: 0.6020, swd: 0.2595, ept: 167.5861
+    Epoch [9/50], Val Losses: mse: 11.6555, mae: 2.5309, huber: 2.0862, swd: 1.1841, ept: 88.0089
+    Epoch [9/50], Test Losses: mse: 10.5303, mae: 2.3092, huber: 1.8765, swd: 1.0963, ept: 96.9932
+      Epoch 9 composite train-obj: 0.602029
+    Epoch [9/50], Test Losses: mse: 9.9678, mae: 2.2890, huber: 1.8526, swd: 1.4296, ept: 90.9176
+    Best round's Test MSE: 9.9680, MAE: 2.2891, SWD: 1.4296
+    Best round's Validation MSE: 10.6736, MAE: 2.4313, SWD: 1.4796
+    Best round's Test verification MSE : 9.9678, MAE: 2.2890, SWD: 1.4296
+    Time taken: 35.16 seconds
+    
+    ==================================================
+     Running experiment with seed 7 (2/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 10.6395, mae: 2.5417, huber: 2.0878, swd: 3.7600, ept: 57.3303
+    Epoch [1/50], Val Losses: mse: 10.1529, mae: 2.4468, huber: 1.9974, swd: 2.1975, ept: 66.3380
+    Epoch [1/50], Test Losses: mse: 10.4792, mae: 2.4590, huber: 2.0099, swd: 2.0222, ept: 71.1496
+      Epoch 1 composite train-obj: 2.087763
+            Val objective improved inf → 1.9974, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 7.1148, mae: 1.9521, huber: 1.5210, swd: 1.4442, ept: 100.4026
+    Epoch [2/50], Val Losses: mse: 10.4635, mae: 2.4533, huber: 2.0082, swd: 2.3558, ept: 78.1026
+    Epoch [2/50], Test Losses: mse: 9.7495, mae: 2.3295, huber: 1.8886, swd: 2.2589, ept: 83.1451
+      Epoch 2 composite train-obj: 1.521042
+            No improvement (2.0082), counter 1/5
+    Epoch [3/50], Train Losses: mse: 5.7274, mae: 1.7048, huber: 1.2861, swd: 1.0376, ept: 117.5906
+    Epoch [3/50], Val Losses: mse: 10.6093, mae: 2.4549, huber: 2.0098, swd: 1.7702, ept: 80.4289
+    Epoch [3/50], Test Losses: mse: 9.5564, mae: 2.2707, huber: 1.8330, swd: 1.6512, ept: 88.5761
+      Epoch 3 composite train-obj: 1.286069
+            No improvement (2.0098), counter 2/5
+    Epoch [4/50], Train Losses: mse: 4.7597, mae: 1.5264, huber: 1.1176, swd: 0.7863, ept: 129.4935
+    Epoch [4/50], Val Losses: mse: 10.9247, mae: 2.4780, huber: 2.0331, swd: 1.5021, ept: 82.4305
+    Epoch [4/50], Test Losses: mse: 9.7222, mae: 2.2673, huber: 1.8316, swd: 1.3981, ept: 93.1155
+      Epoch 4 composite train-obj: 1.117648
+            No improvement (2.0331), counter 3/5
+    Epoch [5/50], Train Losses: mse: 3.9532, mae: 1.3689, huber: 0.9708, swd: 0.5935, ept: 140.0296
+    Epoch [5/50], Val Losses: mse: 10.9370, mae: 2.4542, huber: 2.0099, swd: 1.4341, ept: 88.0686
+    Epoch [5/50], Test Losses: mse: 10.0582, mae: 2.2919, huber: 1.8564, swd: 1.3756, ept: 92.6627
+      Epoch 5 composite train-obj: 0.970827
+            No improvement (2.0099), counter 4/5
+    Epoch [6/50], Train Losses: mse: 3.3756, mae: 1.2552, huber: 0.8649, swd: 0.4797, ept: 147.3153
+    Epoch [6/50], Val Losses: mse: 11.4078, mae: 2.5100, huber: 2.0658, swd: 1.2504, ept: 84.7081
+    Epoch [6/50], Test Losses: mse: 10.0538, mae: 2.2769, huber: 1.8431, swd: 1.1377, ept: 95.3897
+      Epoch 6 composite train-obj: 0.864890
+    Epoch [6/50], Test Losses: mse: 10.4801, mae: 2.4591, huber: 2.0100, swd: 2.0218, ept: 71.1515
+    Best round's Test MSE: 10.4792, MAE: 2.4590, SWD: 2.0222
+    Best round's Validation MSE: 10.1529, MAE: 2.4468, SWD: 2.1975
+    Best round's Test verification MSE : 10.4801, MAE: 2.4591, SWD: 2.0218
+    Time taken: 22.61 seconds
+    
+    ==================================================
+     Running experiment with seed 20 (3/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 11.1098, mae: 2.6161, huber: 2.1597, swd: 3.9388, ept: 50.8137
+    Epoch [1/50], Val Losses: mse: 10.2951, mae: 2.4638, huber: 2.0131, swd: 2.3124, ept: 65.2640
+    Epoch [1/50], Test Losses: mse: 10.8189, mae: 2.5115, huber: 2.0605, swd: 2.2696, ept: 67.5941
+      Epoch 1 composite train-obj: 2.159685
+            Val objective improved inf → 2.0131, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 7.3681, mae: 1.9945, huber: 1.5612, swd: 1.4466, ept: 97.3299
+    Epoch [2/50], Val Losses: mse: 10.6669, mae: 2.4881, huber: 2.0399, swd: 1.8254, ept: 74.5952
+    Epoch [2/50], Test Losses: mse: 9.8998, mae: 2.3619, huber: 1.9177, swd: 1.7772, ept: 80.5482
+      Epoch 2 composite train-obj: 1.561159
+            No improvement (2.0399), counter 1/5
+    Epoch [3/50], Train Losses: mse: 5.7607, mae: 1.7082, huber: 1.2888, swd: 0.9694, ept: 118.0778
+    Epoch [3/50], Val Losses: mse: 10.7433, mae: 2.4793, huber: 2.0324, swd: 1.4589, ept: 79.4074
+    Epoch [3/50], Test Losses: mse: 9.4848, mae: 2.2678, huber: 1.8290, swd: 1.4444, ept: 89.4354
+      Epoch 3 composite train-obj: 1.288821
+            No improvement (2.0324), counter 2/5
+    Epoch [4/50], Train Losses: mse: 4.6536, mae: 1.5055, huber: 1.0975, swd: 0.7104, ept: 131.9134
+    Epoch [4/50], Val Losses: mse: 10.9146, mae: 2.4578, huber: 2.0137, swd: 1.2424, ept: 84.0833
+    Epoch [4/50], Test Losses: mse: 9.6946, mae: 2.2468, huber: 1.8123, swd: 1.1430, ept: 93.1028
+      Epoch 4 composite train-obj: 1.097520
+            No improvement (2.0137), counter 3/5
+    Epoch [5/50], Train Losses: mse: 3.8392, mae: 1.3480, huber: 0.9502, swd: 0.5360, ept: 142.5105
+    Epoch [5/50], Val Losses: mse: 10.8975, mae: 2.4616, huber: 2.0166, swd: 1.2920, ept: 86.7058
+    Epoch [5/50], Test Losses: mse: 9.8303, mae: 2.2527, huber: 1.8177, swd: 1.2211, ept: 96.6293
+      Epoch 5 composite train-obj: 0.950219
+            No improvement (2.0166), counter 4/5
+    Epoch [6/50], Train Losses: mse: 3.2086, mae: 1.2216, huber: 0.8330, swd: 0.4264, ept: 150.8198
+    Epoch [6/50], Val Losses: mse: 11.1708, mae: 2.4876, huber: 2.0433, swd: 1.1661, ept: 87.4099
+    Epoch [6/50], Test Losses: mse: 10.0623, mae: 2.2745, huber: 1.8395, swd: 1.0654, ept: 96.3057
+      Epoch 6 composite train-obj: 0.832980
+    Epoch [6/50], Test Losses: mse: 10.8210, mae: 2.5118, huber: 2.0608, swd: 2.2706, ept: 67.5612
+    Best round's Test MSE: 10.8189, MAE: 2.5115, SWD: 2.2696
+    Best round's Validation MSE: 10.2951, MAE: 2.4638, SWD: 2.3124
+    Best round's Test verification MSE : 10.8210, MAE: 2.5118, SWD: 2.2706
+    Time taken: 19.13 seconds
+    
+    ==================================================
+    Experiment Summary (ACL_lorenz96_seq336_pred196_20250512_2231)
+    ==================================================
+    Number of runs: 3
+    Seeds: [1955, 7, 20]
+    
+    Test Performance at Best Validation (mean ± std):
+      mse: 10.4220 ± 0.3497
+      mae: 2.4199 ± 0.0949
+      huber: 1.9743 ± 0.0885
+      swd: 1.9071 ± 0.3525
+      ept: 76.5531 ± 10.2590
+      count: 11.0000 ± 0.0000
+    
+    Corresponding Validation Performance (mean ± std):
+      mse: 10.3739 ± 0.2197
+      mae: 2.4473 ± 0.0133
+      huber: 1.9993 ± 0.0106
+      swd: 1.9965 ± 0.3685
+      ept: 72.1140 ± 8.9387
+      count: 11.0000 ± 0.0000
+    ==================================================
+    Three seeds Time taken: 76.99 seconds
+    
+    Experiment complete: ACL_lorenz96_seq336_pred196_20250512_2231
+    Model: ACL
+    Dataset: lorenz96
+    Sequence Length: 336
+    Prediction Length: 196
+    Seeds: [1955, 7, 20]
+    
+
+#### pred=336
+
+##### huber
+
+
+```python
+from monotonic import DynamicTanh
+import torch.nn as nn
+
+importlib.reload(monotonic)
+importlib.reload(train_config) 
+cfg = train_config.FlatACLConfig(  # original householder 
+    seq_len=336,
+    pred_len=336,
+    channels=data_mgr.datasets['lorenz96']['channels'],# data_mgr.channels,              # ← number of features in your data
+    batch_size=128,
+    learning_rate=9e-4, 
+    seeds=[1955, 7, 20],  
+    epochs=50, 
+    dim_hidden=128,
+    dim_augment=128, 
+    ablate_no_koopman=False,
+    use_complex_eigenvalues=True,
+    second_delay_use_shift=True,
+    ablate_rotate_back_Koopman=True, 
+    ablate_shift_inside_scale=False,
+    householder_reflects_latent = 2,
+    householder_reflects_data = 4,
+    mixing_strategy='delay_only', 
+    loss_backward_weights = [0.0, 0.0, 1.0, 0.0, 0.0],
+    loss_validate_weights = [0.0, 0.0, 1.0, 0.0, 0.0],
+    ablate_deterministic_y0=False, 
+)
+cfg.x_to_z_delay.enable_magnitudes = [False, True]
+cfg.x_to_z_delay.spectral_flags_scale_shift = [True, False]
+cfg.x_to_z_delay.spectral_flags_magnitudes = [False, True]
+cfg.x_to_z_delay.spectral_flags_hidden_layers = [False, False]
+cfg.x_to_z_delay.activations_scale_shift = ["relu6", "dynamic_tanh"]
+cfg.x_to_z_delay.activations_hidden_layers = [nn.ELU, nn.LogSigmoid]
+
+cfg.x_to_z_deri.enable_magnitudes = [False, True]
+cfg.x_to_z_deri.spectral_flags_scale_shift = [True, False]
+cfg.x_to_z_deri.spectral_flags_magnitudes = [False, True]
+cfg.x_to_z_deri.spectral_flags_hidden_layers = [False, False]
+cfg.x_to_z_deri.activations_scale_shift = ["relu6", "dynamic_tanh"]
+cfg.x_to_z_deri.activations_hidden_layers = [nn.ELU, nn.LogSigmoid]
+
+cfg.z_to_x_main.enable_magnitudes = [False, True]
+cfg.z_to_x_main.spectral_flags_scale_shift = [True, False]
+cfg.z_to_x_main.spectral_flags_magnitudes = [False, True]
+cfg.z_to_x_main.spectral_flags_hidden_layers = [False, False]
+cfg.z_to_x_main.activations_scale_shift = ["relu6", "dynamic_tanh"]
+cfg.z_to_x_main.activations_hidden_layers = [nn.ELU, nn.LogSigmoid]
+
+cfg.z_push_to_z.enable_magnitudes = [False, True]
+cfg.z_push_to_z.spectral_flags_scale_shift = [True, False]
+cfg.z_push_to_z.spectral_flags_magnitudes = [False, True]
+cfg.z_push_to_z.spectral_flags_hidden_layers = [False, False]
+cfg.z_push_to_z.activations_scale_shift = ["relu6", "dynamic_tanh"]
+cfg.z_push_to_z.activations_hidden_layers = [nn.ELU, nn.LogSigmoid]
+
+cfg.z_to_y_main.enable_magnitudes = [False, True]
+cfg.z_to_y_main.spectral_flags_scale_shift = [True, False]
+cfg.z_to_y_main.spectral_flags_magnitudes = [False, True]
+cfg.z_to_y_main.spectral_flags_hidden_layers = [False, False]
+cfg.z_to_y_main.activations_scale_shift = ["relu6", "dynamic_tanh"]
+cfg.z_to_y_main.activations_hidden_layers = [nn.ELU, nn.LogSigmoid]
+exp = execute_model_evaluation('lorenz96', cfg, data_mgr, scale=False)
+```
+
+    Shape of training data: torch.Size([13300, 6])
+    Shape of validation data: torch.Size([1900, 6])
+    Shape of testing data: torch.Size([3800, 6])
+    global_std.shape: torch.Size([6])
+    Global Std for lorenz96: tensor([3.6750, 3.6678, 3.7240, 3.7347, 3.8038, 3.5588], device='cuda:0')
+    Train set sample shapes: torch.Size([336, 6]), torch.Size([336, 6])
+    Validation set sample shapes: torch.Size([336, 6]), torch.Size([336, 6])
+    Test set data shapes: torch.Size([3800, 6]), torch.Size([3800, 6])
+    Number of batches in train_loader: 99
+    Batch 0: Data shape torch.Size([128, 336, 6]), Target shape torch.Size([128, 336, 6])
+    
+    ==================================================
+    Data Preparation: lorenz96
+    ==================================================
+    Sequence Length: 336
+    Prediction Length: 336
+    Batch Size: 128
+    Scaling: No
+    Train Split: 0.7
+    Val Split: 0.8
+    Training Batches: 99
+    Validation Batches: 10
+    Test Batches: 25
+    ==================================================
+    
+    ==================================================
+     Running experiment with seed 1955 (1/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 11.7558, mae: 2.7282, huber: 2.2682, swd: 3.7823, ept: 55.0539
+    Epoch [1/50], Val Losses: mse: 11.1717, mae: 2.6345, huber: 2.1774, swd: 2.5682, ept: 64.0456
+    Epoch [1/50], Test Losses: mse: 12.2574, mae: 2.7407, huber: 2.2828, swd: 2.3159, ept: 70.1997
+      Epoch 1 composite train-obj: 2.268243
+            Val objective improved inf → 2.1774, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 9.0193, mae: 2.2800, huber: 1.8351, swd: 1.7225, ept: 105.1017
+    Epoch [2/50], Val Losses: mse: 11.1119, mae: 2.6101, huber: 2.1553, swd: 2.3444, ept: 75.0331
+    Epoch [2/50], Test Losses: mse: 11.9490, mae: 2.6611, huber: 2.2089, swd: 2.1188, ept: 82.9365
+      Epoch 2 composite train-obj: 1.835126
+            Val objective improved 2.1774 → 2.1553, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 7.6665, mae: 2.0431, huber: 1.6085, swd: 1.2685, ept: 130.0488
+    Epoch [3/50], Val Losses: mse: 11.7030, mae: 2.6585, huber: 2.2037, swd: 1.7537, ept: 78.9068
+    Epoch [3/50], Test Losses: mse: 12.6204, mae: 2.7000, huber: 2.2490, swd: 1.5419, ept: 87.1945
+      Epoch 3 composite train-obj: 1.608522
+            No improvement (2.2037), counter 1/5
+    Epoch [4/50], Train Losses: mse: 6.6538, mae: 1.8651, huber: 1.4389, swd: 0.9924, ept: 147.3468
+    Epoch [4/50], Val Losses: mse: 12.0417, mae: 2.6968, huber: 2.2417, swd: 1.8593, ept: 78.3317
+    Epoch [4/50], Test Losses: mse: 12.7191, mae: 2.7079, huber: 2.2570, swd: 1.6141, ept: 89.6752
+      Epoch 4 composite train-obj: 1.438873
+            No improvement (2.2417), counter 2/5
+    Epoch [5/50], Train Losses: mse: 5.8137, mae: 1.7151, huber: 1.2965, swd: 0.7947, ept: 162.0661
+    Epoch [5/50], Val Losses: mse: 12.1430, mae: 2.6912, huber: 2.2373, swd: 1.5761, ept: 79.7329
+    Epoch [5/50], Test Losses: mse: 13.1588, mae: 2.7337, huber: 2.2841, swd: 1.4584, ept: 93.1914
+      Epoch 5 composite train-obj: 1.296535
+            No improvement (2.2373), counter 3/5
+    Epoch [6/50], Train Losses: mse: 5.0951, mae: 1.5862, huber: 1.1742, swd: 0.6515, ept: 174.9840
+    Epoch [6/50], Val Losses: mse: 12.6264, mae: 2.7401, huber: 2.2853, swd: 1.5319, ept: 80.5995
+    Epoch [6/50], Test Losses: mse: 13.3240, mae: 2.7457, huber: 2.2962, swd: 1.3642, ept: 94.3295
+      Epoch 6 composite train-obj: 1.174225
+            No improvement (2.2853), counter 4/5
+    Epoch [7/50], Train Losses: mse: 4.4802, mae: 1.4758, huber: 1.0697, swd: 0.5383, ept: 186.8588
+    Epoch [7/50], Val Losses: mse: 13.0074, mae: 2.7805, huber: 2.3249, swd: 1.4690, ept: 80.5533
+    Epoch [7/50], Test Losses: mse: 13.5565, mae: 2.7712, huber: 2.3213, swd: 1.3250, ept: 93.5234
+      Epoch 7 composite train-obj: 1.069707
+    Epoch [7/50], Test Losses: mse: 11.9495, mae: 2.6612, huber: 2.2090, swd: 2.1187, ept: 82.8821
+    Best round's Test MSE: 11.9490, MAE: 2.6611, SWD: 2.1188
+    Best round's Validation MSE: 11.1119, MAE: 2.6101, SWD: 2.3444
+    Best round's Test verification MSE : 11.9495, MAE: 2.6612, SWD: 2.1187
+    Time taken: 23.38 seconds
+    
+    ==================================================
+     Running experiment with seed 7 (2/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 11.8474, mae: 2.7434, huber: 2.2829, swd: 3.9429, ept: 53.6277
+    Epoch [1/50], Val Losses: mse: 11.0894, mae: 2.6234, huber: 2.1656, swd: 2.6443, ept: 67.1639
+    Epoch [1/50], Test Losses: mse: 12.3426, mae: 2.7556, huber: 2.2973, swd: 2.3844, ept: 66.8845
+      Epoch 1 composite train-obj: 2.282919
+            Val objective improved inf → 2.1656, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 9.0553, mae: 2.2870, huber: 1.8415, swd: 1.7144, ept: 103.2257
+    Epoch [2/50], Val Losses: mse: 11.4138, mae: 2.6282, huber: 2.1733, swd: 2.1483, ept: 73.6762
+    Epoch [2/50], Test Losses: mse: 12.3455, mae: 2.7128, huber: 2.2584, swd: 1.9147, ept: 80.6588
+      Epoch 2 composite train-obj: 1.841528
+            No improvement (2.1733), counter 1/5
+    Epoch [3/50], Train Losses: mse: 7.7438, mae: 2.0594, huber: 1.6235, swd: 1.3029, ept: 127.4999
+    Epoch [3/50], Val Losses: mse: 11.8616, mae: 2.6664, huber: 2.2110, swd: 1.9680, ept: 78.3623
+    Epoch [3/50], Test Losses: mse: 12.7644, mae: 2.7345, huber: 2.2814, swd: 1.8312, ept: 82.1721
+      Epoch 3 composite train-obj: 1.623505
+            No improvement (2.2110), counter 2/5
+    Epoch [4/50], Train Losses: mse: 6.7069, mae: 1.8763, huber: 1.4489, swd: 1.0187, ept: 145.0231
+    Epoch [4/50], Val Losses: mse: 12.1393, mae: 2.7036, huber: 2.2468, swd: 1.7316, ept: 78.3733
+    Epoch [4/50], Test Losses: mse: 12.9919, mae: 2.7364, huber: 2.2847, swd: 1.5378, ept: 86.8675
+      Epoch 4 composite train-obj: 1.448902
+            No improvement (2.2468), counter 3/5
+    Epoch [5/50], Train Losses: mse: 5.8551, mae: 1.7264, huber: 1.3063, swd: 0.8180, ept: 158.5449
+    Epoch [5/50], Val Losses: mse: 12.5472, mae: 2.7345, huber: 2.2789, swd: 1.6303, ept: 79.8873
+    Epoch [5/50], Test Losses: mse: 13.4536, mae: 2.7760, huber: 2.3245, swd: 1.4847, ept: 87.1217
+      Epoch 5 composite train-obj: 1.306314
+            No improvement (2.2789), counter 4/5
+    Epoch [6/50], Train Losses: mse: 5.1473, mae: 1.5994, huber: 1.1857, swd: 0.6748, ept: 171.8931
+    Epoch [6/50], Val Losses: mse: 12.6952, mae: 2.7459, huber: 2.2904, swd: 1.5825, ept: 82.3124
+    Epoch [6/50], Test Losses: mse: 13.7789, mae: 2.8057, huber: 2.3541, swd: 1.4353, ept: 90.1621
+      Epoch 6 composite train-obj: 1.185749
+    Epoch [6/50], Test Losses: mse: 12.3430, mae: 2.7556, huber: 2.2973, swd: 2.3848, ept: 66.8058
+    Best round's Test MSE: 12.3426, MAE: 2.7556, SWD: 2.3844
+    Best round's Validation MSE: 11.0894, MAE: 2.6234, SWD: 2.6443
+    Best round's Test verification MSE : 12.3430, MAE: 2.7556, SWD: 2.3848
+    Time taken: 18.10 seconds
+    
+    ==================================================
+     Running experiment with seed 20 (3/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 11.8777, mae: 2.7492, huber: 2.2884, swd: 4.0006, ept: 50.9374
+    Epoch [1/50], Val Losses: mse: 11.3426, mae: 2.6690, huber: 2.2092, swd: 3.1800, ept: 59.6340
+    Epoch [1/50], Test Losses: mse: 12.2942, mae: 2.7597, huber: 2.3009, swd: 2.9377, ept: 63.1504
+      Epoch 1 composite train-obj: 2.288422
+            Val objective improved inf → 2.2092, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 9.1013, mae: 2.2997, huber: 1.8535, swd: 1.8142, ept: 100.7232
+    Epoch [2/50], Val Losses: mse: 11.6604, mae: 2.6666, huber: 2.2097, swd: 1.9211, ept: 70.6042
+    Epoch [2/50], Test Losses: mse: 12.2501, mae: 2.7006, huber: 2.2463, swd: 1.8285, ept: 77.8159
+      Epoch 2 composite train-obj: 1.853488
+            No improvement (2.2097), counter 1/5
+    Epoch [3/50], Train Losses: mse: 7.7101, mae: 2.0563, huber: 1.6206, swd: 1.3366, ept: 127.0616
+    Epoch [3/50], Val Losses: mse: 11.8662, mae: 2.6839, huber: 2.2274, swd: 1.9048, ept: 74.1682
+    Epoch [3/50], Test Losses: mse: 12.3807, mae: 2.6928, huber: 2.2408, swd: 1.7413, ept: 83.7015
+      Epoch 3 composite train-obj: 1.620601
+            No improvement (2.2274), counter 2/5
+    Epoch [4/50], Train Losses: mse: 6.6545, mae: 1.8707, huber: 1.4433, swd: 1.0227, ept: 145.6310
+    Epoch [4/50], Val Losses: mse: 12.2483, mae: 2.7191, huber: 2.2622, swd: 1.6300, ept: 74.5489
+    Epoch [4/50], Test Losses: mse: 12.8559, mae: 2.7266, huber: 2.2747, swd: 1.5232, ept: 87.9768
+      Epoch 4 composite train-obj: 1.443338
+            No improvement (2.2622), counter 3/5
+    Epoch [5/50], Train Losses: mse: 5.7490, mae: 1.7073, huber: 1.2882, swd: 0.8012, ept: 161.8500
+    Epoch [5/50], Val Losses: mse: 12.6243, mae: 2.7433, huber: 2.2867, swd: 1.5511, ept: 76.3149
+    Epoch [5/50], Test Losses: mse: 13.3720, mae: 2.7681, huber: 2.3160, swd: 1.3929, ept: 87.0764
+      Epoch 5 composite train-obj: 1.288160
+            No improvement (2.2867), counter 4/5
+    Epoch [6/50], Train Losses: mse: 5.0390, mae: 1.5795, huber: 1.1669, swd: 0.6579, ept: 175.3758
+    Epoch [6/50], Val Losses: mse: 13.1146, mae: 2.7993, huber: 2.3418, swd: 1.5199, ept: 77.5837
+    Epoch [6/50], Test Losses: mse: 13.6890, mae: 2.7903, huber: 2.3389, swd: 1.3882, ept: 89.9428
+      Epoch 6 composite train-obj: 1.166857
+    Epoch [6/50], Test Losses: mse: 12.2935, mae: 2.7596, huber: 2.3009, swd: 2.9374, ept: 63.1768
+    Best round's Test MSE: 12.2942, MAE: 2.7597, SWD: 2.9377
+    Best round's Validation MSE: 11.3426, MAE: 2.6690, SWD: 3.1800
+    Best round's Test verification MSE : 12.2935, MAE: 2.7596, SWD: 2.9374
+    Time taken: 18.01 seconds
+    
+    ==================================================
+    Experiment Summary (ACL_lorenz96_seq336_pred336_20250512_2234)
+    ==================================================
+    Number of runs: 3
+    Seeds: [1955, 7, 20]
+    
+    Test Performance at Best Validation (mean ± std):
+      mse: 12.1953 ± 0.1752
+      mae: 2.7255 ± 0.0455
+      huber: 2.2690 ± 0.0426
+      swd: 2.4803 ± 0.3411
+      ept: 70.9905 ± 8.5836
+      count: 10.0000 ± 0.0000
+    
+    Corresponding Validation Performance (mean ± std):
+      mse: 11.1813 ± 0.1144
+      mae: 2.6342 ± 0.0252
+      huber: 2.1767 ± 0.0233
+      swd: 2.7229 ± 0.3456
+      ept: 67.2770 ± 6.2872
+      count: 10.0000 ± 0.0000
+    ==================================================
+    Three seeds Time taken: 59.58 seconds
+    
+    Experiment complete: ACL_lorenz96_seq336_pred336_20250512_2234
+    Model: ACL
+    Dataset: lorenz96
+    Sequence Length: 336
+    Prediction Length: 336
+    Seeds: [1955, 7, 20]
+    
+
+##### huber + 0.5
+
+
+```python
+from monotonic import DynamicTanh
+import torch.nn as nn
+
+importlib.reload(monotonic)
+importlib.reload(train_config) 
+cfg = train_config.FlatACLConfig(  # original householder 
+    seq_len=336,
+    pred_len=336,
+    channels=data_mgr.datasets['lorenz96']['channels'],# data_mgr.channels,              # ← number of features in your data
+    batch_size=128,
+    learning_rate=9e-4, 
+    seeds=[1955, 7, 20],  
+    epochs=50, 
+    dim_hidden=128,
+    dim_augment=128, 
+    ablate_no_koopman=False,
+    use_complex_eigenvalues=True,
+    second_delay_use_shift=True,
+    ablate_rotate_back_Koopman=True, 
+    ablate_shift_inside_scale=False,
+    householder_reflects_latent = 2,
+    householder_reflects_data = 4,
+    mixing_strategy='delay_only', 
+    loss_backward_weights = [0.0, 0.0, 1.0, 0.5, 0.0],
+    loss_validate_weights = [0.0, 0.0, 1.0, 0.5, 0.0],
+    ablate_deterministic_y0=False, 
+)
+cfg.x_to_z_delay.enable_magnitudes = [False, True]
+cfg.x_to_z_delay.spectral_flags_scale_shift = [True, False]
+cfg.x_to_z_delay.spectral_flags_magnitudes = [False, True]
+cfg.x_to_z_delay.spectral_flags_hidden_layers = [False, False]
+cfg.x_to_z_delay.activations_scale_shift = ["relu6", "dynamic_tanh"]
+cfg.x_to_z_delay.activations_hidden_layers = [nn.ELU, nn.LogSigmoid]
+
+cfg.x_to_z_deri.enable_magnitudes = [False, True]
+cfg.x_to_z_deri.spectral_flags_scale_shift = [True, False]
+cfg.x_to_z_deri.spectral_flags_magnitudes = [False, True]
+cfg.x_to_z_deri.spectral_flags_hidden_layers = [False, False]
+cfg.x_to_z_deri.activations_scale_shift = ["relu6", "dynamic_tanh"]
+cfg.x_to_z_deri.activations_hidden_layers = [nn.ELU, nn.LogSigmoid]
+
+cfg.z_to_x_main.enable_magnitudes = [False, True]
+cfg.z_to_x_main.spectral_flags_scale_shift = [True, False]
+cfg.z_to_x_main.spectral_flags_magnitudes = [False, True]
+cfg.z_to_x_main.spectral_flags_hidden_layers = [False, False]
+cfg.z_to_x_main.activations_scale_shift = ["relu6", "dynamic_tanh"]
+cfg.z_to_x_main.activations_hidden_layers = [nn.ELU, nn.LogSigmoid]
+
+cfg.z_push_to_z.enable_magnitudes = [False, True]
+cfg.z_push_to_z.spectral_flags_scale_shift = [True, False]
+cfg.z_push_to_z.spectral_flags_magnitudes = [False, True]
+cfg.z_push_to_z.spectral_flags_hidden_layers = [False, False]
+cfg.z_push_to_z.activations_scale_shift = ["relu6", "dynamic_tanh"]
+cfg.z_push_to_z.activations_hidden_layers = [nn.ELU, nn.LogSigmoid]
+
+cfg.z_to_y_main.enable_magnitudes = [False, True]
+cfg.z_to_y_main.spectral_flags_scale_shift = [True, False]
+cfg.z_to_y_main.spectral_flags_magnitudes = [False, True]
+cfg.z_to_y_main.spectral_flags_hidden_layers = [False, False]
+cfg.z_to_y_main.activations_scale_shift = ["relu6", "dynamic_tanh"]
+cfg.z_to_y_main.activations_hidden_layers = [nn.ELU, nn.LogSigmoid]
+exp = execute_model_evaluation('lorenz96', cfg, data_mgr, scale=False)
+```
+
+    Shape of training data: torch.Size([13300, 6])
+    Shape of validation data: torch.Size([1900, 6])
+    Shape of testing data: torch.Size([3800, 6])
+    global_std.shape: torch.Size([6])
+    Global Std for lorenz96: tensor([3.6750, 3.6678, 3.7240, 3.7347, 3.8038, 3.5588], device='cuda:0')
+    Train set sample shapes: torch.Size([336, 6]), torch.Size([336, 6])
+    Validation set sample shapes: torch.Size([336, 6]), torch.Size([336, 6])
+    Test set data shapes: torch.Size([3800, 6]), torch.Size([3800, 6])
+    Number of batches in train_loader: 99
+    Batch 0: Data shape torch.Size([128, 336, 6]), Target shape torch.Size([128, 336, 6])
+    
+    ==================================================
+    Data Preparation: lorenz96
+    ==================================================
+    Sequence Length: 336
+    Prediction Length: 336
+    Batch Size: 128
+    Scaling: No
+    Train Split: 0.7
+    Val Split: 0.8
+    Training Batches: 99
+    Validation Batches: 10
+    Test Batches: 25
+    ==================================================
+    
+    ==================================================
+     Running experiment with seed 1955 (1/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 16.2651, mae: 3.2281, huber: 2.7599, swd: 1.6161, ept: 12.6866
+    Epoch [1/50], Val Losses: mse: 13.6205, mae: 2.9604, huber: 2.4959, swd: 1.0892, ept: 27.7519
+    Epoch [1/50], Test Losses: mse: 14.5911, mae: 3.0343, huber: 2.5693, swd: 0.8415, ept: 28.3225
+      Epoch 1 composite train-obj: 3.567914
+            Val objective improved inf → 3.0405, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 11.9679, mae: 2.7093, huber: 2.2507, swd: 0.4756, ept: 45.7536
+    Epoch [2/50], Val Losses: mse: 12.2180, mae: 2.7843, huber: 2.3228, swd: 1.2284, ept: 44.4852
+    Epoch [2/50], Test Losses: mse: 13.3138, mae: 2.8693, huber: 2.4085, swd: 0.9671, ept: 46.9943
+      Epoch 2 composite train-obj: 2.488507
+            Val objective improved 3.0405 → 2.9371, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 10.6041, mae: 2.4896, huber: 2.0380, swd: 0.4094, ept: 65.0913
+    Epoch [3/50], Val Losses: mse: 12.2052, mae: 2.7636, huber: 2.3033, swd: 1.1680, ept: 50.1105
+    Epoch [3/50], Test Losses: mse: 13.0718, mae: 2.8223, huber: 2.3635, swd: 1.0271, ept: 57.5926
+      Epoch 3 composite train-obj: 2.242637
+            Val objective improved 2.9371 → 2.8873, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 9.5238, mae: 2.3150, huber: 1.8694, swd: 0.3338, ept: 83.2127
+    Epoch [4/50], Val Losses: mse: 12.5663, mae: 2.7837, huber: 2.3244, swd: 0.9993, ept: 54.8570
+    Epoch [4/50], Test Losses: mse: 13.5058, mae: 2.8405, huber: 2.3828, swd: 0.8921, ept: 61.8914
+      Epoch 4 composite train-obj: 2.036268
+            Val objective improved 2.8873 → 2.8240, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 8.5781, mae: 2.1623, huber: 1.7221, swd: 0.2834, ept: 100.6038
+    Epoch [5/50], Val Losses: mse: 12.9162, mae: 2.7944, huber: 2.3365, swd: 0.9941, ept: 60.7629
+    Epoch [5/50], Test Losses: mse: 14.1143, mae: 2.8849, huber: 2.4283, swd: 0.9043, ept: 66.0785
+      Epoch 5 composite train-obj: 1.863748
+            No improvement (2.8335), counter 1/5
+    Epoch [6/50], Train Losses: mse: 7.6834, mae: 2.0169, huber: 1.5822, swd: 0.2390, ept: 116.5811
+    Epoch [6/50], Val Losses: mse: 13.0697, mae: 2.8127, huber: 2.3542, swd: 1.0369, ept: 63.3423
+    Epoch [6/50], Test Losses: mse: 14.1080, mae: 2.8806, huber: 2.4245, swd: 0.9438, ept: 69.4768
+      Epoch 6 composite train-obj: 1.701723
+            No improvement (2.8727), counter 2/5
+    Epoch [7/50], Train Losses: mse: 6.9256, mae: 1.8939, huber: 1.4642, swd: 0.2184, ept: 128.9849
+    Epoch [7/50], Val Losses: mse: 13.3215, mae: 2.8374, huber: 2.3786, swd: 1.0773, ept: 65.6900
+    Epoch [7/50], Test Losses: mse: 14.0266, mae: 2.8601, huber: 2.4050, swd: 0.9513, ept: 74.4558
+      Epoch 7 composite train-obj: 1.573398
+            No improvement (2.9172), counter 3/5
+    Epoch [8/50], Train Losses: mse: 6.2412, mae: 1.7780, huber: 1.3536, swd: 0.1890, ept: 142.2076
+    Epoch [8/50], Val Losses: mse: 13.5158, mae: 2.8380, huber: 2.3802, swd: 1.0576, ept: 67.3370
+    Epoch [8/50], Test Losses: mse: 14.3062, mae: 2.8792, huber: 2.4239, swd: 0.9383, ept: 75.9138
+      Epoch 8 composite train-obj: 1.448039
+            No improvement (2.9090), counter 4/5
+    Epoch [9/50], Train Losses: mse: 5.6322, mae: 1.6751, huber: 1.2554, swd: 0.1672, ept: 153.2241
+    Epoch [9/50], Val Losses: mse: 14.0187, mae: 2.8932, huber: 2.4344, swd: 1.0752, ept: 65.6157
+    Epoch [9/50], Test Losses: mse: 14.7608, mae: 2.9285, huber: 2.4728, swd: 0.9134, ept: 77.0856
+      Epoch 9 composite train-obj: 1.339051
+    Epoch [9/50], Test Losses: mse: 13.5065, mae: 2.8407, huber: 2.3830, swd: 0.8920, ept: 61.9187
+    Best round's Test MSE: 13.5058, MAE: 2.8405, SWD: 0.8921
+    Best round's Validation MSE: 12.5663, MAE: 2.7837, SWD: 0.9993
+    Best round's Test verification MSE : 13.5065, MAE: 2.8407, SWD: 0.8920
+    Time taken: 27.65 seconds
+    
+    ==================================================
+     Running experiment with seed 7 (2/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 17.1344, mae: 3.3137, huber: 2.8446, swd: 1.8359, ept: 12.6223
+    Epoch [1/50], Val Losses: mse: 13.2957, mae: 2.9342, huber: 2.4697, swd: 1.3987, ept: 24.3872
+    Epoch [1/50], Test Losses: mse: 13.9101, mae: 2.9864, huber: 2.5208, swd: 1.0679, ept: 25.6910
+      Epoch 1 composite train-obj: 3.762504
+            Val objective improved inf → 3.1690, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 12.1464, mae: 2.7375, huber: 2.2783, swd: 0.5043, ept: 47.1894
+    Epoch [2/50], Val Losses: mse: 12.4450, mae: 2.7813, huber: 2.3211, swd: 1.0679, ept: 47.3704
+    Epoch [2/50], Test Losses: mse: 13.7529, mae: 2.8996, huber: 2.4389, swd: 0.8026, ept: 48.8151
+      Epoch 2 composite train-obj: 2.530418
+            Val objective improved 3.1690 → 2.8550, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 10.7791, mae: 2.5180, huber: 2.0659, swd: 0.4062, ept: 67.3035
+    Epoch [3/50], Val Losses: mse: 12.4804, mae: 2.7764, huber: 2.3172, swd: 1.0451, ept: 53.1793
+    Epoch [3/50], Test Losses: mse: 13.3359, mae: 2.8386, huber: 2.3798, swd: 0.8578, ept: 58.5848
+      Epoch 3 composite train-obj: 2.269054
+            Val objective improved 2.8550 → 2.8397, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 9.8013, mae: 2.3592, huber: 1.9127, swd: 0.3369, ept: 84.3213
+    Epoch [4/50], Val Losses: mse: 12.1392, mae: 2.7235, huber: 2.2654, swd: 1.0078, ept: 60.1258
+    Epoch [4/50], Test Losses: mse: 13.1435, mae: 2.8053, huber: 2.3481, swd: 0.9395, ept: 64.6989
+      Epoch 4 composite train-obj: 2.081142
+            Val objective improved 2.8397 → 2.7694, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 8.9079, mae: 2.2159, huber: 1.7745, swd: 0.2866, ept: 99.2485
+    Epoch [5/50], Val Losses: mse: 12.6611, mae: 2.7651, huber: 2.3078, swd: 0.9743, ept: 61.8800
+    Epoch [5/50], Test Losses: mse: 13.6501, mae: 2.8426, huber: 2.3860, swd: 0.8710, ept: 66.8827
+      Epoch 5 composite train-obj: 1.917746
+            No improvement (2.7949), counter 1/5
+    Epoch [6/50], Train Losses: mse: 8.1172, mae: 2.0879, huber: 1.6513, swd: 0.2532, ept: 112.6100
+    Epoch [6/50], Val Losses: mse: 12.8605, mae: 2.7826, huber: 2.3255, swd: 0.9914, ept: 64.9106
+    Epoch [6/50], Test Losses: mse: 13.6771, mae: 2.8328, huber: 2.3773, swd: 0.8938, ept: 73.4790
+      Epoch 6 composite train-obj: 1.777860
+            No improvement (2.8213), counter 2/5
+    Epoch [7/50], Train Losses: mse: 7.3744, mae: 1.9674, huber: 1.5354, swd: 0.2217, ept: 124.6047
+    Epoch [7/50], Val Losses: mse: 12.9563, mae: 2.7921, huber: 2.3347, swd: 1.0390, ept: 66.6792
+    Epoch [7/50], Test Losses: mse: 13.7436, mae: 2.8278, huber: 2.3732, swd: 0.9433, ept: 74.8944
+      Epoch 7 composite train-obj: 1.646316
+            No improvement (2.8542), counter 3/5
+    Epoch [8/50], Train Losses: mse: 6.6993, mae: 1.8551, huber: 1.4279, swd: 0.1963, ept: 135.7889
+    Epoch [8/50], Val Losses: mse: 13.2153, mae: 2.8196, huber: 2.3619, swd: 1.0342, ept: 66.7441
+    Epoch [8/50], Test Losses: mse: 13.9705, mae: 2.8412, huber: 2.3866, swd: 0.9308, ept: 78.0328
+      Epoch 8 composite train-obj: 1.526034
+            No improvement (2.8790), counter 4/5
+    Epoch [9/50], Train Losses: mse: 6.0737, mae: 1.7502, huber: 1.3277, swd: 0.1777, ept: 146.4995
+    Epoch [9/50], Val Losses: mse: 13.4365, mae: 2.8400, huber: 2.3823, swd: 1.0820, ept: 68.5285
+    Epoch [9/50], Test Losses: mse: 13.9858, mae: 2.8324, huber: 2.3786, swd: 0.9622, ept: 81.4343
+      Epoch 9 composite train-obj: 1.416515
+    Epoch [9/50], Test Losses: mse: 13.1430, mae: 2.8053, huber: 2.3481, swd: 0.9396, ept: 64.6702
+    Best round's Test MSE: 13.1435, MAE: 2.8053, SWD: 0.9395
+    Best round's Validation MSE: 12.1392, MAE: 2.7235, SWD: 1.0078
+    Best round's Test verification MSE : 13.1430, MAE: 2.8053, SWD: 0.9396
+    Time taken: 30.06 seconds
+    
+    ==================================================
+     Running experiment with seed 20 (3/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 16.6812, mae: 3.2803, huber: 2.8115, swd: 1.7502, ept: 10.9041
+    Epoch [1/50], Val Losses: mse: 13.9633, mae: 2.9983, huber: 2.5330, swd: 1.0585, ept: 19.2024
+    Epoch [1/50], Test Losses: mse: 14.9267, mae: 3.0786, huber: 2.6126, swd: 0.8197, ept: 20.3625
+      Epoch 1 composite train-obj: 3.686633
+            Val objective improved inf → 3.0623, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 12.3166, mae: 2.7575, huber: 2.2979, swd: 0.4984, ept: 43.3778
+    Epoch [2/50], Val Losses: mse: 12.4137, mae: 2.7898, huber: 2.3285, swd: 1.1044, ept: 44.1869
+    Epoch [2/50], Test Losses: mse: 13.7220, mae: 2.9090, huber: 2.4475, swd: 0.8618, ept: 46.2765
+      Epoch 2 composite train-obj: 2.547114
+            Val objective improved 3.0623 → 2.8807, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 10.9733, mae: 2.5436, huber: 2.0908, swd: 0.4187, ept: 63.4588
+    Epoch [3/50], Val Losses: mse: 12.3789, mae: 2.7647, huber: 2.3047, swd: 0.9773, ept: 49.4467
+    Epoch [3/50], Test Losses: mse: 13.7566, mae: 2.8873, huber: 2.4275, swd: 0.7959, ept: 54.3078
+      Epoch 3 composite train-obj: 2.300134
+            Val objective improved 2.8807 → 2.7933, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 10.0039, mae: 2.3892, huber: 1.9415, swd: 0.3574, ept: 77.7756
+    Epoch [4/50], Val Losses: mse: 11.8048, mae: 2.6837, huber: 2.2265, swd: 1.0957, ept: 60.1197
+    Epoch [4/50], Test Losses: mse: 13.2640, mae: 2.8239, huber: 2.3666, swd: 0.9936, ept: 61.6486
+      Epoch 4 composite train-obj: 2.120235
+            Val objective improved 2.7933 → 2.7743, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 9.1308, mae: 2.2510, huber: 1.8081, swd: 0.3025, ept: 90.3065
+    Epoch [5/50], Val Losses: mse: 12.5135, mae: 2.7574, huber: 2.3000, swd: 1.0144, ept: 62.9498
+    Epoch [5/50], Test Losses: mse: 13.5216, mae: 2.8327, huber: 2.3763, swd: 0.8995, ept: 65.4633
+      Epoch 5 composite train-obj: 1.959394
+            No improvement (2.8072), counter 1/5
+    Epoch [6/50], Train Losses: mse: 8.3152, mae: 2.1228, huber: 1.6844, swd: 0.2701, ept: 102.2210
+    Epoch [6/50], Val Losses: mse: 12.9463, mae: 2.8109, huber: 2.3524, swd: 1.0179, ept: 60.2020
+    Epoch [6/50], Test Losses: mse: 13.6732, mae: 2.8359, huber: 2.3803, swd: 0.9144, ept: 69.1726
+      Epoch 6 composite train-obj: 1.819473
+            No improvement (2.8613), counter 2/5
+    Epoch [7/50], Train Losses: mse: 7.5777, mae: 2.0038, huber: 1.5698, swd: 0.2348, ept: 113.8447
+    Epoch [7/50], Val Losses: mse: 12.9838, mae: 2.8092, huber: 2.3505, swd: 1.0755, ept: 63.2773
+    Epoch [7/50], Test Losses: mse: 13.6314, mae: 2.8311, huber: 2.3754, swd: 0.9235, ept: 69.4392
+      Epoch 7 composite train-obj: 1.687257
+            No improvement (2.8882), counter 3/5
+    Epoch [8/50], Train Losses: mse: 6.8894, mae: 1.8899, huber: 1.4607, swd: 0.2111, ept: 126.2351
+    Epoch [8/50], Val Losses: mse: 13.4711, mae: 2.8613, huber: 2.4019, swd: 1.0182, ept: 60.9308
+    Epoch [8/50], Test Losses: mse: 14.1382, mae: 2.8782, huber: 2.4220, swd: 0.9270, ept: 71.3165
+      Epoch 8 composite train-obj: 1.566264
+            No improvement (2.9110), counter 4/5
+    Epoch [9/50], Train Losses: mse: 6.3190, mae: 1.7948, huber: 1.3697, swd: 0.1902, ept: 136.7696
+    Epoch [9/50], Val Losses: mse: 13.7037, mae: 2.8822, huber: 2.4228, swd: 1.0554, ept: 63.2732
+    Epoch [9/50], Test Losses: mse: 14.2069, mae: 2.8727, huber: 2.4172, swd: 0.9364, ept: 75.8007
+      Epoch 9 composite train-obj: 1.464780
+    Epoch [9/50], Test Losses: mse: 13.2647, mae: 2.8240, huber: 2.3667, swd: 0.9937, ept: 61.6743
+    Best round's Test MSE: 13.2640, MAE: 2.8239, SWD: 0.9936
+    Best round's Validation MSE: 11.8048, MAE: 2.6837, SWD: 1.0957
+    Best round's Test verification MSE : 13.2647, MAE: 2.8240, SWD: 0.9937
+    Time taken: 32.35 seconds
+    
+    ==================================================
+    Experiment Summary (ACL_lorenz96_seq336_pred336_20250512_2327)
+    ==================================================
+    Number of runs: 3
+    Seeds: [1955, 7, 20]
+    
+    Test Performance at Best Validation (mean ± std):
+      mse: 13.3044 ± 0.1506
+      mae: 2.8232 ± 0.0144
+      huber: 2.3658 ± 0.0142
+      swd: 0.9417 ± 0.0415
+      ept: 62.7463 ± 1.3842
+      count: 10.0000 ± 0.0000
+    
+    Corresponding Validation Performance (mean ± std):
+      mse: 12.1701 ± 0.3116
+      mae: 2.7303 ± 0.0411
+      huber: 2.2721 ± 0.0402
+      swd: 1.0342 ± 0.0436
+      ept: 58.3675 ± 2.4823
+      count: 10.0000 ± 0.0000
+    ==================================================
+    Three seeds Time taken: 90.19 seconds
+    
+    Experiment complete: ACL_lorenz96_seq336_pred336_20250512_2327
+    Model: ACL
+    Dataset: lorenz96
+    Sequence Length: 336
+    Prediction Length: 336
+    Seeds: [1955, 7, 20]
+    
+
+##### MSE + 0.5
+
+
+```python
+from monotonic import DynamicTanh
+import torch.nn as nn
+
+importlib.reload(monotonic)
+importlib.reload(train_config) 
+cfg = train_config.FlatACLConfig(  # original householder 
+    seq_len=336,
+    pred_len=336,
+    channels=data_mgr.datasets['lorenz96']['channels'],# data_mgr.channels,              # ← number of features in your data
+    batch_size=128,
+    learning_rate=9e-4, 
+    seeds=[1955, 7, 20],  
+    epochs=50, 
+    dim_hidden=128,
+    dim_augment=128, 
+    ablate_no_koopman=False,
+    use_complex_eigenvalues=True,
+    second_delay_use_shift=True,
+    ablate_rotate_back_Koopman=True, 
+    ablate_shift_inside_scale=False,
+    householder_reflects_latent = 2,
+    householder_reflects_data = 4,
+    mixing_strategy='delay_only', 
+    loss_backward_weights = [1.0, 0.0, 0.0, 0.5, 0.0],
+    loss_validate_weights = [1.0, 0.0, 0.0, 0.5, 0.0],
+    ablate_deterministic_y0=False, 
+)
+cfg.x_to_z_delay.enable_magnitudes = [False, True]
+cfg.x_to_z_delay.spectral_flags_scale_shift = [True, False]
+cfg.x_to_z_delay.spectral_flags_magnitudes = [False, True]
+cfg.x_to_z_delay.spectral_flags_hidden_layers = [False, False]
+cfg.x_to_z_delay.activations_scale_shift = ["relu6", "dynamic_tanh"]
+cfg.x_to_z_delay.activations_hidden_layers = [nn.ELU, nn.LogSigmoid]
+
+cfg.x_to_z_deri.enable_magnitudes = [False, True]
+cfg.x_to_z_deri.spectral_flags_scale_shift = [True, False]
+cfg.x_to_z_deri.spectral_flags_magnitudes = [False, True]
+cfg.x_to_z_deri.spectral_flags_hidden_layers = [False, False]
+cfg.x_to_z_deri.activations_scale_shift = ["relu6", "dynamic_tanh"]
+cfg.x_to_z_deri.activations_hidden_layers = [nn.ELU, nn.LogSigmoid]
+
+cfg.z_to_x_main.enable_magnitudes = [False, True]
+cfg.z_to_x_main.spectral_flags_scale_shift = [True, False]
+cfg.z_to_x_main.spectral_flags_magnitudes = [False, True]
+cfg.z_to_x_main.spectral_flags_hidden_layers = [False, False]
+cfg.z_to_x_main.activations_scale_shift = ["relu6", "dynamic_tanh"]
+cfg.z_to_x_main.activations_hidden_layers = [nn.ELU, nn.LogSigmoid]
+
+cfg.z_push_to_z.enable_magnitudes = [False, True]
+cfg.z_push_to_z.spectral_flags_scale_shift = [True, False]
+cfg.z_push_to_z.spectral_flags_magnitudes = [False, True]
+cfg.z_push_to_z.spectral_flags_hidden_layers = [False, False]
+cfg.z_push_to_z.activations_scale_shift = ["relu6", "dynamic_tanh"]
+cfg.z_push_to_z.activations_hidden_layers = [nn.ELU, nn.LogSigmoid]
+
+cfg.z_to_y_main.enable_magnitudes = [False, True]
+cfg.z_to_y_main.spectral_flags_scale_shift = [True, False]
+cfg.z_to_y_main.spectral_flags_magnitudes = [False, True]
+cfg.z_to_y_main.spectral_flags_hidden_layers = [False, False]
+cfg.z_to_y_main.activations_scale_shift = ["relu6", "dynamic_tanh"]
+cfg.z_to_y_main.activations_hidden_layers = [nn.ELU, nn.LogSigmoid]
+exp = execute_model_evaluation('lorenz96', cfg, data_mgr, scale=False)
+```
+
+    Shape of training data: torch.Size([13300, 6])
+    Shape of validation data: torch.Size([1900, 6])
+    Shape of testing data: torch.Size([3800, 6])
+    global_std.shape: torch.Size([6])
+    Global Std for lorenz96: tensor([3.6750, 3.6678, 3.7240, 3.7347, 3.8038, 3.5588], device='cuda:0')
+    Train set sample shapes: torch.Size([336, 6]), torch.Size([336, 6])
+    Validation set sample shapes: torch.Size([336, 6]), torch.Size([336, 6])
+    Test set data shapes: torch.Size([3800, 6]), torch.Size([3800, 6])
+    Number of batches in train_loader: 99
+    Batch 0: Data shape torch.Size([128, 336, 6]), Target shape torch.Size([128, 336, 6])
+    
+    ==================================================
+    Data Preparation: lorenz96
+    ==================================================
+    Sequence Length: 336
+    Prediction Length: 336
+    Batch Size: 128
+    Scaling: No
+    Train Split: 0.7
+    Val Split: 0.8
+    Training Batches: 99
+    Validation Batches: 10
+    Test Batches: 25
+    ==================================================
+    
+    ==================================================
+     Running experiment with seed 1955 (1/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 12.7174, mae: 2.8765, huber: 2.4117, swd: 2.4379, ept: 33.7406
+    Epoch [1/50], Val Losses: mse: 11.6792, mae: 2.7360, huber: 2.2738, swd: 1.5612, ept: 44.0915
+    Epoch [1/50], Test Losses: mse: 12.6262, mae: 2.8185, huber: 2.3566, swd: 1.2500, ept: 47.3593
+      Epoch 1 composite train-obj: 13.936290
+            Val objective improved inf → 12.4598, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 9.6456, mae: 2.4364, huber: 1.9818, swd: 0.9658, ept: 75.0900
+    Epoch [2/50], Val Losses: mse: 11.3831, mae: 2.6734, huber: 2.2141, swd: 1.7371, ept: 61.0177
+    Epoch [2/50], Test Losses: mse: 11.9945, mae: 2.7119, huber: 2.2541, swd: 1.4781, ept: 66.2276
+      Epoch 2 composite train-obj: 10.128494
+            Val objective improved 12.4598 → 12.2516, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 8.0944, mae: 2.1920, huber: 1.7448, swd: 0.7447, ept: 100.4123
+    Epoch [3/50], Val Losses: mse: 12.3052, mae: 2.7569, huber: 2.2970, swd: 1.2576, ept: 64.0834
+    Epoch [3/50], Test Losses: mse: 12.7197, mae: 2.7620, huber: 2.3048, swd: 1.0528, ept: 72.0563
+      Epoch 3 composite train-obj: 8.466782
+            No improvement (12.9340), counter 1/5
+    Epoch [4/50], Train Losses: mse: 6.8759, mae: 1.9984, huber: 1.5576, swd: 0.5851, ept: 118.5698
+    Epoch [4/50], Val Losses: mse: 12.3235, mae: 2.7532, huber: 2.2945, swd: 1.4452, ept: 66.8923
+    Epoch [4/50], Test Losses: mse: 13.0297, mae: 2.7829, huber: 2.3263, swd: 1.2801, ept: 76.5898
+      Epoch 4 composite train-obj: 7.168471
+            No improvement (13.0461), counter 2/5
+    Epoch [5/50], Train Losses: mse: 5.8844, mae: 1.8366, huber: 1.4014, swd: 0.4643, ept: 134.4946
+    Epoch [5/50], Val Losses: mse: 13.0960, mae: 2.8214, huber: 2.3618, swd: 1.0782, ept: 65.8190
+    Epoch [5/50], Test Losses: mse: 13.9490, mae: 2.8520, huber: 2.3956, swd: 0.9502, ept: 76.7981
+      Epoch 5 composite train-obj: 6.116517
+            No improvement (13.6351), counter 3/5
+    Epoch [6/50], Train Losses: mse: 4.9759, mae: 1.6811, huber: 1.2520, swd: 0.3661, ept: 151.4574
+    Epoch [6/50], Val Losses: mse: 13.2631, mae: 2.8316, huber: 2.3723, swd: 1.0876, ept: 66.8721
+    Epoch [6/50], Test Losses: mse: 14.1379, mae: 2.8675, huber: 2.4112, swd: 1.0405, ept: 80.1861
+      Epoch 6 composite train-obj: 5.158915
+            No improvement (13.8069), counter 4/5
+    Epoch [7/50], Train Losses: mse: 4.2841, mae: 1.5563, huber: 1.1326, swd: 0.3000, ept: 166.8270
+    Epoch [7/50], Val Losses: mse: 14.0561, mae: 2.9015, huber: 2.4421, swd: 1.0502, ept: 68.5487
+    Epoch [7/50], Test Losses: mse: 14.7309, mae: 2.9186, huber: 2.4624, swd: 1.0357, ept: 80.4521
+      Epoch 7 composite train-obj: 4.434076
+    Epoch [7/50], Test Losses: mse: 11.9939, mae: 2.7118, huber: 2.2540, swd: 1.4781, ept: 66.2251
+    Best round's Test MSE: 11.9945, MAE: 2.7119, SWD: 1.4781
+    Best round's Validation MSE: 11.3831, MAE: 2.6734, SWD: 1.7371
+    Best round's Test verification MSE : 11.9939, MAE: 2.7118, SWD: 1.4781
+    Time taken: 24.43 seconds
+    
+    ==================================================
+     Running experiment with seed 7 (2/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 12.5039, mae: 2.8455, huber: 2.3815, swd: 2.4510, ept: 38.8286
+    Epoch [1/50], Val Losses: mse: 11.1722, mae: 2.6690, huber: 2.2085, swd: 2.1717, ept: 54.5470
+    Epoch [1/50], Test Losses: mse: 12.1554, mae: 2.7651, huber: 2.3046, swd: 1.8126, ept: 55.0235
+      Epoch 1 composite train-obj: 13.729365
+            Val objective improved inf → 12.2581, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 9.4983, mae: 2.4124, huber: 1.9587, swd: 0.9741, ept: 80.7506
+    Epoch [2/50], Val Losses: mse: 11.4369, mae: 2.6803, huber: 2.2202, swd: 1.3679, ept: 59.6668
+    Epoch [2/50], Test Losses: mse: 12.1549, mae: 2.7301, huber: 2.2716, swd: 1.1626, ept: 67.0315
+      Epoch 2 composite train-obj: 9.985363
+            Val objective improved 12.2581 → 12.1208, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 8.0237, mae: 2.1807, huber: 1.7340, swd: 0.7456, ept: 103.6570
+    Epoch [3/50], Val Losses: mse: 11.9735, mae: 2.7211, huber: 2.2623, swd: 1.1866, ept: 65.0291
+    Epoch [3/50], Test Losses: mse: 12.4293, mae: 2.7199, huber: 2.2640, swd: 1.0673, ept: 75.0736
+      Epoch 3 composite train-obj: 8.396536
+            No improvement (12.5667), counter 1/5
+    Epoch [4/50], Train Losses: mse: 6.8192, mae: 1.9852, huber: 1.5454, swd: 0.5772, ept: 121.8321
+    Epoch [4/50], Val Losses: mse: 12.4014, mae: 2.7586, huber: 2.3000, swd: 1.2434, ept: 65.8592
+    Epoch [4/50], Test Losses: mse: 12.8696, mae: 2.7532, huber: 2.2980, swd: 1.1676, ept: 77.9171
+      Epoch 4 composite train-obj: 7.107824
+            No improvement (13.0231), counter 2/5
+    Epoch [5/50], Train Losses: mse: 5.8381, mae: 1.8239, huber: 1.3898, swd: 0.4659, ept: 136.5889
+    Epoch [5/50], Val Losses: mse: 13.0173, mae: 2.8087, huber: 2.3497, swd: 1.1713, ept: 69.3508
+    Epoch [5/50], Test Losses: mse: 13.4067, mae: 2.7881, huber: 2.3337, swd: 1.1032, ept: 80.0553
+      Epoch 5 composite train-obj: 6.071059
+            No improvement (13.6029), counter 3/5
+    Epoch [6/50], Train Losses: mse: 4.9444, mae: 1.6712, huber: 1.2429, swd: 0.3679, ept: 152.0033
+    Epoch [6/50], Val Losses: mse: 13.1061, mae: 2.8130, huber: 2.3544, swd: 1.1748, ept: 70.4633
+    Epoch [6/50], Test Losses: mse: 13.6874, mae: 2.8104, huber: 2.3558, swd: 1.1065, ept: 82.1912
+      Epoch 6 composite train-obj: 5.128385
+            No improvement (13.6935), counter 4/5
+    Epoch [7/50], Train Losses: mse: 4.2241, mae: 1.5407, huber: 1.1182, swd: 0.2968, ept: 167.9551
+    Epoch [7/50], Val Losses: mse: 14.0158, mae: 2.8950, huber: 2.4359, swd: 1.1394, ept: 71.7101
+    Epoch [7/50], Test Losses: mse: 14.3506, mae: 2.8683, huber: 2.4135, swd: 1.0182, ept: 82.8778
+      Epoch 7 composite train-obj: 4.372435
+    Epoch [7/50], Test Losses: mse: 12.1552, mae: 2.7301, huber: 2.2716, swd: 1.1622, ept: 66.9689
+    Best round's Test MSE: 12.1549, MAE: 2.7301, SWD: 1.1626
+    Best round's Validation MSE: 11.4369, MAE: 2.6803, SWD: 1.3679
+    Best round's Test verification MSE : 12.1552, MAE: 2.7301, SWD: 1.1622
+    Time taken: 27.07 seconds
+    
+    ==================================================
+     Running experiment with seed 20 (3/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 12.8259, mae: 2.8885, huber: 2.4236, swd: 2.5687, ept: 32.1124
+    Epoch [1/50], Val Losses: mse: 11.4874, mae: 2.7326, huber: 2.2694, swd: 2.0251, ept: 47.3933
+    Epoch [1/50], Test Losses: mse: 12.3350, mae: 2.7948, huber: 2.3333, swd: 1.7442, ept: 49.3310
+      Epoch 1 composite train-obj: 14.110273
+            Val objective improved inf → 12.4999, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 9.7016, mae: 2.4428, huber: 1.9881, swd: 1.0230, ept: 73.9018
+    Epoch [2/50], Val Losses: mse: 11.5237, mae: 2.6901, huber: 2.2300, swd: 1.4145, ept: 58.9149
+    Epoch [2/50], Test Losses: mse: 12.1805, mae: 2.7342, huber: 2.2756, swd: 1.2658, ept: 63.5531
+      Epoch 2 composite train-obj: 10.213143
+            Val objective improved 12.4999 → 12.2310, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 8.2041, mae: 2.2090, huber: 1.7614, swd: 0.7996, ept: 97.8918
+    Epoch [3/50], Val Losses: mse: 11.7819, mae: 2.6911, huber: 2.2332, swd: 1.2510, ept: 65.9859
+    Epoch [3/50], Test Losses: mse: 12.2830, mae: 2.7160, huber: 2.2597, swd: 1.1665, ept: 71.7787
+      Epoch 3 composite train-obj: 8.603907
+            No improvement (12.4074), counter 1/5
+    Epoch [4/50], Train Losses: mse: 7.0847, mae: 2.0306, huber: 1.5888, swd: 0.6416, ept: 115.0342
+    Epoch [4/50], Val Losses: mse: 12.3296, mae: 2.7365, huber: 2.2787, swd: 1.1348, ept: 66.4343
+    Epoch [4/50], Test Losses: mse: 12.9226, mae: 2.7639, huber: 2.3077, swd: 1.1111, ept: 74.2767
+      Epoch 4 composite train-obj: 7.405505
+            No improvement (12.8970), counter 2/5
+    Epoch [5/50], Train Losses: mse: 6.0838, mae: 1.8677, huber: 1.4317, swd: 0.5113, ept: 130.3404
+    Epoch [5/50], Val Losses: mse: 12.6383, mae: 2.7573, huber: 2.2995, swd: 1.1338, ept: 66.2692
+    Epoch [5/50], Test Losses: mse: 13.2677, mae: 2.7882, huber: 2.3328, swd: 1.0931, ept: 77.9585
+      Epoch 5 composite train-obj: 6.339486
+            No improvement (13.2052), counter 3/5
+    Epoch [6/50], Train Losses: mse: 5.2313, mae: 1.7252, huber: 1.2945, swd: 0.4130, ept: 143.3500
+    Epoch [6/50], Val Losses: mse: 13.1362, mae: 2.8087, huber: 2.3500, swd: 1.0575, ept: 67.6856
+    Epoch [6/50], Test Losses: mse: 13.6611, mae: 2.8215, huber: 2.3662, swd: 1.0720, ept: 78.9178
+      Epoch 6 composite train-obj: 5.437837
+            No improvement (13.6650), counter 4/5
+    Epoch [7/50], Train Losses: mse: 4.5022, mae: 1.5969, huber: 1.1716, swd: 0.3366, ept: 157.4370
+    Epoch [7/50], Val Losses: mse: 13.9216, mae: 2.8889, huber: 2.4298, swd: 0.9785, ept: 66.5866
+    Epoch [7/50], Test Losses: mse: 14.0946, mae: 2.8549, huber: 2.3993, swd: 0.9926, ept: 78.3389
+      Epoch 7 composite train-obj: 4.670443
+    Epoch [7/50], Test Losses: mse: 12.1797, mae: 2.7341, huber: 2.2755, swd: 1.2657, ept: 63.6303
+    Best round's Test MSE: 12.1805, MAE: 2.7342, SWD: 1.2658
+    Best round's Validation MSE: 11.5237, MAE: 2.6901, SWD: 1.4145
+    Best round's Test verification MSE : 12.1797, MAE: 2.7341, SWD: 1.2657
+    Time taken: 27.09 seconds
+    
+    ==================================================
+    Experiment Summary (ACL_lorenz96_seq336_pred336_20250513_0001)
+    ==================================================
+    Number of runs: 3
+    Seeds: [1955, 7, 20]
+    
+    Test Performance at Best Validation (mean ± std):
+      mse: 12.1100 ± 0.0823
+      mae: 2.7254 ± 0.0097
+      huber: 2.2671 ± 0.0094
+      swd: 1.3021 ± 0.1313
+      ept: 65.6040 ± 1.4869
+      count: 10.0000 ± 0.0000
+    
+    Corresponding Validation Performance (mean ± std):
+      mse: 11.4479 ± 0.0579
+      mae: 2.6813 ± 0.0069
+      huber: 2.2214 ± 0.0065
+      swd: 1.5065 ± 0.1641
+      ept: 59.8665 ± 0.8700
+      count: 10.0000 ± 0.0000
+    ==================================================
+    Three seeds Time taken: 78.76 seconds
+    
+    Experiment complete: ACL_lorenz96_seq336_pred336_20250513_0001
+    Model: ACL
+    Dataset: lorenz96
+    Sequence Length: 336
+    Prediction Length: 336
+    Seeds: [1955, 7, 20]
+    
+
+#### pred=720
+
+
+```python
+from monotonic import DynamicTanh
+import torch.nn as nn
+
+importlib.reload(monotonic)
+importlib.reload(train_config) 
+cfg = train_config.FlatACLConfig(  # original householder 
+    seq_len=336,
+    pred_len=720,
+    channels=data_mgr.datasets['lorenz96']['channels'],# data_mgr.channels,              # ← number of features in your data
+    batch_size=128,
+    learning_rate=9e-4, 
+    seeds=[1955, 7, 20],  
+    epochs=50, 
+    dim_hidden=128,
+    dim_augment=128, 
+    ablate_no_koopman=False,
+    use_complex_eigenvalues=True,
+    second_delay_use_shift=True,
+    ablate_rotate_back_Koopman=True, 
+    ablate_shift_inside_scale=False,
+    householder_reflects_latent = 2,
+    householder_reflects_data = 4,
+    mixing_strategy='delay_only', 
+    loss_backward_weights = [0.0, 0.0, 1.0, 0.0, 0.0],
+    loss_validate_weights = [0.0, 0.0, 1.0, 0.0, 0.0],
+    ablate_deterministic_y0=False, 
+)
+cfg.x_to_z_delay.enable_magnitudes = [False, True]
+cfg.x_to_z_delay.spectral_flags_scale_shift = [True, False]
+cfg.x_to_z_delay.spectral_flags_magnitudes = [False, True]
+cfg.x_to_z_delay.spectral_flags_hidden_layers = [False, False]
+cfg.x_to_z_delay.activations_scale_shift = ["relu6", "dynamic_tanh"]
+cfg.x_to_z_delay.activations_hidden_layers = [nn.ELU, nn.LogSigmoid]
+
+cfg.x_to_z_deri.enable_magnitudes = [False, True]
+cfg.x_to_z_deri.spectral_flags_scale_shift = [True, False]
+cfg.x_to_z_deri.spectral_flags_magnitudes = [False, True]
+cfg.x_to_z_deri.spectral_flags_hidden_layers = [False, False]
+cfg.x_to_z_deri.activations_scale_shift = ["relu6", "dynamic_tanh"]
+cfg.x_to_z_deri.activations_hidden_layers = [nn.ELU, nn.LogSigmoid]
+
+cfg.z_to_x_main.enable_magnitudes = [False, True]
+cfg.z_to_x_main.spectral_flags_scale_shift = [True, False]
+cfg.z_to_x_main.spectral_flags_magnitudes = [False, True]
+cfg.z_to_x_main.spectral_flags_hidden_layers = [False, False]
+cfg.z_to_x_main.activations_scale_shift = ["relu6", "dynamic_tanh"]
+cfg.z_to_x_main.activations_hidden_layers = [nn.ELU, nn.LogSigmoid]
+
+cfg.z_push_to_z.enable_magnitudes = [False, True]
+cfg.z_push_to_z.spectral_flags_scale_shift = [True, False]
+cfg.z_push_to_z.spectral_flags_magnitudes = [False, True]
+cfg.z_push_to_z.spectral_flags_hidden_layers = [False, False]
+cfg.z_push_to_z.activations_scale_shift = ["relu6", "dynamic_tanh"]
+cfg.z_push_to_z.activations_hidden_layers = [nn.ELU, nn.LogSigmoid]
+
+cfg.z_to_y_main.enable_magnitudes = [False, True]
+cfg.z_to_y_main.spectral_flags_scale_shift = [True, False]
+cfg.z_to_y_main.spectral_flags_magnitudes = [False, True]
+cfg.z_to_y_main.spectral_flags_hidden_layers = [False, False]
+cfg.z_to_y_main.activations_scale_shift = ["relu6", "dynamic_tanh"]
+cfg.z_to_y_main.activations_hidden_layers = [nn.ELU, nn.LogSigmoid]
+exp = execute_model_evaluation('lorenz96', cfg, data_mgr, scale=False)
+```
+
+    Shape of training data: torch.Size([13300, 6])
+    Shape of validation data: torch.Size([1900, 6])
+    Shape of testing data: torch.Size([3800, 6])
+    global_std.shape: torch.Size([6])
+    Global Std for lorenz96: tensor([3.6750, 3.6678, 3.7240, 3.7347, 3.8038, 3.5588], device='cuda:0')
+    Train set sample shapes: torch.Size([336, 6]), torch.Size([720, 6])
+    Validation set sample shapes: torch.Size([336, 6]), torch.Size([720, 6])
+    Test set data shapes: torch.Size([3800, 6]), torch.Size([3800, 6])
+    Number of batches in train_loader: 96
+    Batch 0: Data shape torch.Size([128, 336, 6]), Target shape torch.Size([128, 720, 6])
+    
+    ==================================================
+    Data Preparation: lorenz96
+    ==================================================
+    Sequence Length: 336
+    Prediction Length: 720
+    Batch Size: 128
+    Scaling: No
+    Train Split: 0.7
+    Val Split: 0.8
+    Training Batches: 96
+    Validation Batches: 7
+    Test Batches: 22
+    ==================================================
+    
+    ==================================================
+     Running experiment with seed 1955 (1/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 12.8220, mae: 2.9036, huber: 2.4386, swd: 4.1431, ept: 43.8077
+    Epoch [1/50], Val Losses: mse: 12.8933, mae: 2.9085, huber: 2.4433, swd: 3.4970, ept: 61.2606
+    Epoch [1/50], Test Losses: mse: 13.7519, mae: 2.9774, huber: 2.5126, swd: 3.0936, ept: 57.5667
+      Epoch 1 composite train-obj: 2.438551
+            Val objective improved inf → 2.4433, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 10.9519, mae: 2.6104, huber: 2.1535, swd: 2.1394, ept: 91.1048
+    Epoch [2/50], Val Losses: mse: 13.2021, mae: 2.9299, huber: 2.4655, swd: 2.7602, ept: 66.7696
+    Epoch [2/50], Test Losses: mse: 14.0805, mae: 2.9800, huber: 2.5175, swd: 2.4682, ept: 71.8899
+      Epoch 2 composite train-obj: 2.153544
+            No improvement (2.4655), counter 1/5
+    Epoch [3/50], Train Losses: mse: 9.8395, mae: 2.4236, huber: 1.9731, swd: 1.6553, ept: 114.8099
+    Epoch [3/50], Val Losses: mse: 13.3926, mae: 2.9275, huber: 2.4647, swd: 2.3660, ept: 71.6674
+    Epoch [3/50], Test Losses: mse: 14.4831, mae: 2.9996, huber: 2.5380, swd: 2.1842, ept: 80.8996
+      Epoch 3 composite train-obj: 1.973109
+            No improvement (2.4647), counter 2/5
+    Epoch [4/50], Train Losses: mse: 8.7554, mae: 2.2441, huber: 1.7999, swd: 1.3031, ept: 130.1255
+    Epoch [4/50], Val Losses: mse: 13.8369, mae: 2.9672, huber: 2.5031, swd: 1.8706, ept: 67.8098
+    Epoch [4/50], Test Losses: mse: 15.0183, mae: 3.0353, huber: 2.5738, swd: 1.7234, ept: 83.0925
+      Epoch 4 composite train-obj: 1.799909
+            No improvement (2.5031), counter 3/5
+    Epoch [5/50], Train Losses: mse: 7.7384, mae: 2.0730, huber: 1.6352, swd: 1.0478, ept: 141.9758
+    Epoch [5/50], Val Losses: mse: 14.8413, mae: 3.0606, huber: 2.5962, swd: 1.7587, ept: 65.5120
+    Epoch [5/50], Test Losses: mse: 15.3694, mae: 3.0631, huber: 2.6018, swd: 1.6636, ept: 78.5702
+      Epoch 5 composite train-obj: 1.635219
+            No improvement (2.5962), counter 4/5
+    Epoch [6/50], Train Losses: mse: 6.8217, mae: 1.9170, huber: 1.4856, swd: 0.8617, ept: 153.4013
+    Epoch [6/50], Val Losses: mse: 16.0520, mae: 3.1660, huber: 2.7012, swd: 1.3090, ept: 66.8188
+    Epoch [6/50], Test Losses: mse: 16.4150, mae: 3.1552, huber: 2.6933, swd: 1.2381, ept: 78.8333
+      Epoch 6 composite train-obj: 1.485580
+    Epoch [6/50], Test Losses: mse: 13.7518, mae: 2.9774, huber: 2.5126, swd: 3.0933, ept: 57.5147
+    Best round's Test MSE: 13.7519, MAE: 2.9774, SWD: 3.0936
+    Best round's Validation MSE: 12.8933, MAE: 2.9085, SWD: 3.4970
+    Best round's Test verification MSE : 13.7518, MAE: 2.9774, SWD: 3.0933
+    Time taken: 17.75 seconds
+    
+    ==================================================
+     Running experiment with seed 7 (2/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 12.6940, mae: 2.8814, huber: 2.4172, swd: 4.0456, ept: 51.1002
+    Epoch [1/50], Val Losses: mse: 12.5078, mae: 2.8484, huber: 2.3850, swd: 3.1945, ept: 69.8108
+    Epoch [1/50], Test Losses: mse: 13.8360, mae: 2.9733, huber: 2.5093, swd: 2.8167, ept: 67.3287
+      Epoch 1 composite train-obj: 2.417189
+            Val objective improved inf → 2.3850, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 10.7701, mae: 2.5816, huber: 2.1259, swd: 2.1102, ept: 98.6768
+    Epoch [2/50], Val Losses: mse: 13.2403, mae: 2.9213, huber: 2.4573, swd: 2.6965, ept: 69.0799
+    Epoch [2/50], Test Losses: mse: 13.9157, mae: 2.9552, huber: 2.4936, swd: 2.3758, ept: 77.5803
+      Epoch 2 composite train-obj: 2.125875
+            No improvement (2.4573), counter 1/5
+    Epoch [3/50], Train Losses: mse: 9.6776, mae: 2.3970, huber: 1.9477, swd: 1.6354, ept: 120.0328
+    Epoch [3/50], Val Losses: mse: 13.7861, mae: 2.9667, huber: 2.5033, swd: 2.2913, ept: 72.3321
+    Epoch [3/50], Test Losses: mse: 14.6146, mae: 3.0042, huber: 2.5429, swd: 2.0694, ept: 83.4041
+      Epoch 3 composite train-obj: 1.947661
+            No improvement (2.5033), counter 2/5
+    Epoch [4/50], Train Losses: mse: 8.6308, mae: 2.2223, huber: 1.7792, swd: 1.3003, ept: 135.5318
+    Epoch [4/50], Val Losses: mse: 14.8552, mae: 3.0708, huber: 2.6066, swd: 2.2028, ept: 74.9344
+    Epoch [4/50], Test Losses: mse: 14.9382, mae: 3.0287, huber: 2.5677, swd: 1.9754, ept: 84.0501
+      Epoch 4 composite train-obj: 1.779208
+            No improvement (2.6066), counter 3/5
+    Epoch [5/50], Train Losses: mse: 7.6884, mae: 2.0648, huber: 1.6276, swd: 1.0682, ept: 146.1461
+    Epoch [5/50], Val Losses: mse: 15.4541, mae: 3.1162, huber: 2.6518, swd: 1.7700, ept: 70.7815
+    Epoch [5/50], Test Losses: mse: 15.6014, mae: 3.0816, huber: 2.6205, swd: 1.6381, ept: 83.9945
+      Epoch 5 composite train-obj: 1.627560
+            No improvement (2.6518), counter 4/5
+    Epoch [6/50], Train Losses: mse: 6.7658, mae: 1.9075, huber: 1.4766, swd: 0.8693, ept: 158.0412
+    Epoch [6/50], Val Losses: mse: 15.9067, mae: 3.1625, huber: 2.6973, swd: 1.5445, ept: 71.5503
+    Epoch [6/50], Test Losses: mse: 16.0528, mae: 3.1204, huber: 2.6589, swd: 1.4869, ept: 83.4015
+      Epoch 6 composite train-obj: 1.476639
+    Epoch [6/50], Test Losses: mse: 13.8357, mae: 2.9733, huber: 2.5093, swd: 2.8171, ept: 67.4020
+    Best round's Test MSE: 13.8360, MAE: 2.9733, SWD: 2.8167
+    Best round's Validation MSE: 12.5078, MAE: 2.8484, SWD: 3.1945
+    Best round's Test verification MSE : 13.8357, MAE: 2.9733, SWD: 2.8171
+    Time taken: 17.70 seconds
+    
+    ==================================================
+     Running experiment with seed 20 (3/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 12.9222, mae: 2.9166, huber: 2.4514, swd: 4.3320, ept: 42.9147
+    Epoch [1/50], Val Losses: mse: 12.7888, mae: 2.8976, huber: 2.4324, swd: 3.4028, ept: 62.2850
+    Epoch [1/50], Test Losses: mse: 13.7724, mae: 2.9761, huber: 2.5115, swd: 2.9817, ept: 61.0863
+      Epoch 1 composite train-obj: 2.451408
+            Val objective improved inf → 2.4324, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 10.9504, mae: 2.6134, huber: 2.1563, swd: 2.1973, ept: 92.6597
+    Epoch [2/50], Val Losses: mse: 13.0114, mae: 2.9058, huber: 2.4416, swd: 3.0250, ept: 65.4326
+    Epoch [2/50], Test Losses: mse: 13.8381, mae: 2.9530, huber: 2.4911, swd: 2.6235, ept: 78.5068
+      Epoch 2 composite train-obj: 2.156259
+            No improvement (2.4416), counter 1/5
+    Epoch [3/50], Train Losses: mse: 9.8627, mae: 2.4287, huber: 1.9780, swd: 1.7172, ept: 114.8847
+    Epoch [3/50], Val Losses: mse: 13.7173, mae: 2.9693, huber: 2.5046, swd: 2.3164, ept: 67.5340
+    Epoch [3/50], Test Losses: mse: 14.4146, mae: 2.9883, huber: 2.5269, swd: 1.9928, ept: 78.9352
+      Epoch 3 composite train-obj: 1.977994
+            No improvement (2.5046), counter 2/5
+    Epoch [4/50], Train Losses: mse: 8.8160, mae: 2.2538, huber: 1.8093, swd: 1.3662, ept: 129.4613
+    Epoch [4/50], Val Losses: mse: 14.4006, mae: 3.0277, huber: 2.5630, swd: 1.9534, ept: 66.4461
+    Epoch [4/50], Test Losses: mse: 15.1421, mae: 3.0505, huber: 2.5889, swd: 1.7961, ept: 79.3975
+      Epoch 4 composite train-obj: 1.809349
+            No improvement (2.5630), counter 3/5
+    Epoch [5/50], Train Losses: mse: 7.7891, mae: 2.0820, huber: 1.6440, swd: 1.0986, ept: 141.7418
+    Epoch [5/50], Val Losses: mse: 15.0740, mae: 3.0960, huber: 2.6305, swd: 1.7185, ept: 61.5005
+    Epoch [5/50], Test Losses: mse: 15.6868, mae: 3.0920, huber: 2.6305, swd: 1.5871, ept: 80.3264
+      Epoch 5 composite train-obj: 1.643991
+            No improvement (2.6305), counter 4/5
+    Epoch [6/50], Train Losses: mse: 6.7853, mae: 1.9112, huber: 1.4800, swd: 0.8866, ept: 153.9141
+    Epoch [6/50], Val Losses: mse: 15.4726, mae: 3.1311, huber: 2.6657, swd: 1.6116, ept: 65.8224
+    Epoch [6/50], Test Losses: mse: 15.7964, mae: 3.0988, huber: 2.6372, swd: 1.5512, ept: 81.7805
+      Epoch 6 composite train-obj: 1.480019
+    Epoch [6/50], Test Losses: mse: 13.7723, mae: 2.9761, huber: 2.5115, swd: 2.9822, ept: 61.2105
+    Best round's Test MSE: 13.7724, MAE: 2.9761, SWD: 2.9817
+    Best round's Validation MSE: 12.7888, MAE: 2.8976, SWD: 3.4028
+    Best round's Test verification MSE : 13.7723, MAE: 2.9761, SWD: 2.9822
+    Time taken: 17.37 seconds
+    
+    ==================================================
+    Experiment Summary (ACL_lorenz96_seq336_pred720_20250512_2235)
+    ==================================================
+    Number of runs: 3
+    Seeds: [1955, 7, 20]
+    
+    Test Performance at Best Validation (mean ± std):
+      mse: 13.7868 ± 0.0358
+      mae: 2.9756 ± 0.0017
+      huber: 2.5111 ± 0.0014
+      swd: 2.9640 ± 0.1137
+      ept: 61.9939 ± 4.0366
+      count: 7.0000 ± 0.0000
+    
+    Corresponding Validation Performance (mean ± std):
+      mse: 12.7300 ± 0.1628
+      mae: 2.8848 ± 0.0261
+      huber: 2.4202 ± 0.0253
+      swd: 3.3648 ± 0.1264
+      ept: 64.4522 ± 3.8122
+      count: 7.0000 ± 0.0000
+    ==================================================
+    Three seeds Time taken: 52.92 seconds
+    
+    Experiment complete: ACL_lorenz96_seq336_pred720_20250512_2235
+    Model: ACL
+    Dataset: lorenz96
+    Sequence Length: 336
+    Prediction Length: 720
+    Seeds: [1955, 7, 20]
+    
+
+### Timemixer
+
+#### pred=96
+
+##### huber
+
+
+```python
+utils.reload_modules([utils])
+cfg = train_config.FlatTimeMixerConfig(
+    seq_len=336,
+    pred_len=96,
+    channels=data_mgr.datasets['lorenz96']['channels'],
+    enc_in=data_mgr.datasets['lorenz96']['channels'],
+    dec_in=data_mgr.datasets['lorenz96']['channels'],
+    c_out=data_mgr.datasets['lorenz96']['channels'],
+    batch_size=128,
+    learning_rate=9e-4,
+    seeds=[1955, 7, 20],
+    epochs=50, 
+)
+exp_mixer_96_96 = execute_model_evaluation('lorenz96', cfg, data_mgr, scale=False)
+
+```
+
+    Reloading modules...
+      Reloaded: utils
+    Module reload complete.
+    Shape of training data: torch.Size([13300, 6])
+    Shape of validation data: torch.Size([1900, 6])
+    Shape of testing data: torch.Size([3800, 6])
+    global_std.shape: torch.Size([6])
+    Global Std for lorenz96: tensor([3.6750, 3.6678, 3.7240, 3.7347, 3.8038, 3.5588], device='cuda:0')
+    Train set sample shapes: torch.Size([336, 6]), torch.Size([96, 6])
+    Validation set sample shapes: torch.Size([336, 6]), torch.Size([96, 6])
+    Test set data shapes: torch.Size([3800, 6]), torch.Size([3800, 6])
+    Number of batches in train_loader: 101
+    Batch 0: Data shape torch.Size([128, 336, 6]), Target shape torch.Size([128, 96, 6])
+    
+    ==================================================
+    Data Preparation: lorenz96
+    ==================================================
+    Sequence Length: 336
+    Prediction Length: 96
+    Batch Size: 128
+    Scaling: No
+    Train Split: 0.7
+    Val Split: 0.8
+    Training Batches: 101
+    Validation Batches: 12
+    Test Batches: 27
+    ==================================================
+    
+    ==================================================
+     Running experiment with seed 1955 (1/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 11.3803, mae: 2.5678, huber: 2.1168, swd: 3.3467, ept: 40.5773
+    Epoch [1/50], Val Losses: mse: 9.1700, mae: 2.2215, huber: 1.7883, swd: 2.9416, ept: 58.6029
+    Epoch [1/50], Test Losses: mse: 10.1798, mae: 2.3597, huber: 1.9234, swd: 3.1340, ept: 55.5526
+      Epoch 1 composite train-obj: 2.116761
+            Val objective improved inf → 1.7883, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 7.5372, mae: 2.0046, huber: 1.5734, swd: 2.1742, ept: 61.4305
+    Epoch [2/50], Val Losses: mse: 8.5839, mae: 2.1266, huber: 1.6996, swd: 2.5352, ept: 61.9847
+    Epoch [2/50], Test Losses: mse: 9.2723, mae: 2.2090, huber: 1.7795, swd: 2.6859, ept: 60.4794
+      Epoch 2 composite train-obj: 1.573440
+            Val objective improved 1.7883 → 1.6996, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 6.1953, mae: 1.7799, huber: 1.3590, swd: 1.7194, ept: 67.9014
+    Epoch [3/50], Val Losses: mse: 8.8121, mae: 2.1665, huber: 1.7360, swd: 2.3489, ept: 60.2001
+    Epoch [3/50], Test Losses: mse: 8.6049, mae: 2.1134, huber: 1.6868, swd: 2.2105, ept: 62.2621
+      Epoch 3 composite train-obj: 1.359029
+            No improvement (1.7360), counter 1/5
+    Epoch [4/50], Train Losses: mse: 5.0606, mae: 1.5867, huber: 1.1753, swd: 1.3711, ept: 73.1633
+    Epoch [4/50], Val Losses: mse: 8.6948, mae: 2.1577, huber: 1.7295, swd: 2.3454, ept: 60.5392
+    Epoch [4/50], Test Losses: mse: 8.2654, mae: 2.0567, huber: 1.6330, swd: 2.1511, ept: 63.3051
+      Epoch 4 composite train-obj: 1.175251
+            No improvement (1.7295), counter 2/5
+    Epoch [5/50], Train Losses: mse: 4.1309, mae: 1.4229, huber: 1.0198, swd: 1.0991, ept: 77.6941
+    Epoch [5/50], Val Losses: mse: 8.9457, mae: 2.1735, huber: 1.7462, swd: 2.3599, ept: 61.3012
+    Epoch [5/50], Test Losses: mse: 8.0472, mae: 2.0165, huber: 1.5955, swd: 2.0576, ept: 64.8477
+      Epoch 5 composite train-obj: 1.019816
+            No improvement (1.7462), counter 3/5
+    Epoch [6/50], Train Losses: mse: 3.3738, mae: 1.2775, huber: 0.8835, swd: 0.8774, ept: 81.5099
+    Epoch [6/50], Val Losses: mse: 8.8603, mae: 2.1752, huber: 1.7441, swd: 2.2668, ept: 60.9784
+    Epoch [6/50], Test Losses: mse: 7.8792, mae: 2.0021, huber: 1.5781, swd: 1.9296, ept: 65.5428
+      Epoch 6 composite train-obj: 0.883483
+            No improvement (1.7441), counter 4/5
+    Epoch [7/50], Train Losses: mse: 2.7753, mae: 1.1558, huber: 0.7699, swd: 0.7101, ept: 84.8390
+    Epoch [7/50], Val Losses: mse: 8.8179, mae: 2.1755, huber: 1.7449, swd: 2.2994, ept: 61.5595
+    Epoch [7/50], Test Losses: mse: 8.0937, mae: 2.0226, huber: 1.6010, swd: 1.9487, ept: 65.9017
+      Epoch 7 composite train-obj: 0.769912
+    Epoch [7/50], Test Losses: mse: 9.2723, mae: 2.2090, huber: 1.7795, swd: 2.6859, ept: 60.4794
+    Best round's Test MSE: 9.2723, MAE: 2.2090, SWD: 2.6859
+    Best round's Validation MSE: 8.5839, MAE: 2.1266, SWD: 2.5352
+    Best round's Test verification MSE : 9.2723, MAE: 2.2090, SWD: 2.6859
+    Time taken: 40.08 seconds
+    
+    ==================================================
+     Running experiment with seed 7 (2/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 10.8581, mae: 2.5120, huber: 2.0616, swd: 3.1836, ept: 40.3354
+    Epoch [1/50], Val Losses: mse: 8.6540, mae: 2.1735, huber: 1.7396, swd: 2.6860, ept: 60.0956
+    Epoch [1/50], Test Losses: mse: 9.3332, mae: 2.2588, huber: 1.8226, swd: 2.8326, ept: 58.3739
+      Epoch 1 composite train-obj: 2.061628
+            Val objective improved inf → 1.7396, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 6.5395, mae: 1.8533, huber: 1.4271, swd: 1.8466, ept: 65.6366
+    Epoch [2/50], Val Losses: mse: 8.6301, mae: 2.1324, huber: 1.6995, swd: 2.3092, ept: 62.6260
+    Epoch [2/50], Test Losses: mse: 8.3916, mae: 2.0882, huber: 1.6585, swd: 2.1389, ept: 63.3820
+      Epoch 2 composite train-obj: 1.427102
+            Val objective improved 1.7396 → 1.6995, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 4.6693, mae: 1.5274, huber: 1.1182, swd: 1.2395, ept: 75.2223
+    Epoch [3/50], Val Losses: mse: 8.7333, mae: 2.1386, huber: 1.7071, swd: 2.2922, ept: 62.4394
+    Epoch [3/50], Test Losses: mse: 8.0290, mae: 2.0178, huber: 1.5935, swd: 2.0137, ept: 65.3521
+      Epoch 3 composite train-obj: 1.118245
+            No improvement (1.7071), counter 1/5
+    Epoch [4/50], Train Losses: mse: 3.4607, mae: 1.2991, huber: 0.9036, swd: 0.9030, ept: 81.5627
+    Epoch [4/50], Val Losses: mse: 8.6520, mae: 2.1143, huber: 1.6859, swd: 2.3440, ept: 64.6345
+    Epoch [4/50], Test Losses: mse: 7.6075, mae: 1.9537, huber: 1.5336, swd: 1.9975, ept: 67.3523
+      Epoch 4 composite train-obj: 0.903637
+            Val objective improved 1.6995 → 1.6859, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 2.6066, mae: 1.1229, huber: 0.7401, swd: 0.6749, ept: 85.8885
+    Epoch [5/50], Val Losses: mse: 8.8692, mae: 2.1104, huber: 1.6830, swd: 2.2247, ept: 65.0982
+    Epoch [5/50], Test Losses: mse: 7.5842, mae: 1.9341, huber: 1.5142, swd: 1.9474, ept: 68.8485
+      Epoch 5 composite train-obj: 0.740130
+            Val objective improved 1.6859 → 1.6830, saving checkpoint.
+    Epoch [6/50], Train Losses: mse: 2.0479, mae: 0.9984, huber: 0.6257, swd: 0.5310, ept: 88.7739
+    Epoch [6/50], Val Losses: mse: 8.7948, mae: 2.1109, huber: 1.6843, swd: 2.3038, ept: 65.7479
+    Epoch [6/50], Test Losses: mse: 7.4419, mae: 1.9086, huber: 1.4931, swd: 1.9134, ept: 69.3162
+      Epoch 6 composite train-obj: 0.625705
+            No improvement (1.6843), counter 1/5
+    Epoch [7/50], Train Losses: mse: 1.6526, mae: 0.8972, huber: 0.5350, swd: 0.4214, ept: 90.8607
+    Epoch [7/50], Val Losses: mse: 8.9283, mae: 2.1203, huber: 1.6933, swd: 2.3356, ept: 65.5364
+    Epoch [7/50], Test Losses: mse: 7.5525, mae: 1.9137, huber: 1.4984, swd: 1.9049, ept: 70.0835
+      Epoch 7 composite train-obj: 0.535041
+            No improvement (1.6933), counter 2/5
+    Epoch [8/50], Train Losses: mse: 1.3434, mae: 0.8111, huber: 0.4594, swd: 0.3379, ept: 92.3639
+    Epoch [8/50], Val Losses: mse: 9.2761, mae: 2.1487, huber: 1.7220, swd: 2.3755, ept: 65.0271
+    Epoch [8/50], Test Losses: mse: 7.7222, mae: 1.9270, huber: 1.5117, swd: 1.8862, ept: 69.9276
+      Epoch 8 composite train-obj: 0.459425
+            No improvement (1.7220), counter 3/5
+    Epoch [9/50], Train Losses: mse: 1.1257, mae: 0.7463, huber: 0.4034, swd: 0.2830, ept: 93.3517
+    Epoch [9/50], Val Losses: mse: 8.8945, mae: 2.1061, huber: 1.6803, swd: 2.3686, ept: 66.4672
+    Epoch [9/50], Test Losses: mse: 7.6409, mae: 1.9168, huber: 1.5022, swd: 1.8871, ept: 70.1917
+      Epoch 9 composite train-obj: 0.403359
+            Val objective improved 1.6830 → 1.6803, saving checkpoint.
+    Epoch [10/50], Train Losses: mse: 0.9655, mae: 0.6946, huber: 0.3596, swd: 0.2426, ept: 94.0500
+    Epoch [10/50], Val Losses: mse: 8.9865, mae: 2.1206, huber: 1.6946, swd: 2.3538, ept: 66.2530
+    Epoch [10/50], Test Losses: mse: 7.7409, mae: 1.9221, huber: 1.5093, swd: 1.8887, ept: 70.0502
+      Epoch 10 composite train-obj: 0.359643
+            No improvement (1.6946), counter 1/5
+    Epoch [11/50], Train Losses: mse: 0.8376, mae: 0.6517, huber: 0.3235, swd: 0.2089, ept: 94.5810
+    Epoch [11/50], Val Losses: mse: 8.8974, mae: 2.1172, huber: 1.6912, swd: 2.2859, ept: 66.5720
+    Epoch [11/50], Test Losses: mse: 7.7349, mae: 1.9204, huber: 1.5068, swd: 1.8702, ept: 70.0396
+      Epoch 11 composite train-obj: 0.323499
+            No improvement (1.6912), counter 2/5
+    Epoch [12/50], Train Losses: mse: 0.7433, mae: 0.6170, huber: 0.2951, swd: 0.1861, ept: 94.8756
+    Epoch [12/50], Val Losses: mse: 9.1469, mae: 2.1353, huber: 1.7086, swd: 2.3258, ept: 66.8648
+    Epoch [12/50], Test Losses: mse: 7.7873, mae: 1.9254, huber: 1.5128, swd: 1.8910, ept: 70.0131
+      Epoch 12 composite train-obj: 0.295131
+            No improvement (1.7086), counter 3/5
+    Epoch [13/50], Train Losses: mse: 0.6566, mae: 0.5811, huber: 0.2668, swd: 0.1632, ept: 95.1536
+    Epoch [13/50], Val Losses: mse: 9.0171, mae: 2.1189, huber: 1.6926, swd: 2.2684, ept: 66.8561
+    Epoch [13/50], Test Losses: mse: 7.8091, mae: 1.9380, huber: 1.5231, swd: 1.9325, ept: 69.9075
+      Epoch 13 composite train-obj: 0.266780
+            No improvement (1.6926), counter 4/5
+    Epoch [14/50], Train Losses: mse: 0.5934, mae: 0.5556, huber: 0.2468, swd: 0.1514, ept: 95.3219
+    Epoch [14/50], Val Losses: mse: 9.0662, mae: 2.1231, huber: 1.6973, swd: 2.2937, ept: 66.8756
+    Epoch [14/50], Test Losses: mse: 8.0171, mae: 1.9631, huber: 1.5469, swd: 1.9272, ept: 69.3421
+      Epoch 14 composite train-obj: 0.246805
+    Epoch [14/50], Test Losses: mse: 7.6409, mae: 1.9168, huber: 1.5022, swd: 1.8871, ept: 70.1917
+    Best round's Test MSE: 7.6409, MAE: 1.9168, SWD: 1.8871
+    Best round's Validation MSE: 8.8945, MAE: 2.1061, SWD: 2.3686
+    Best round's Test verification MSE : 7.6409, MAE: 1.9168, SWD: 1.8871
+    Time taken: 79.45 seconds
+    
+    ==================================================
+     Running experiment with seed 20 (3/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 12.8056, mae: 2.7165, huber: 2.2617, swd: 2.9268, ept: 32.4350
+    Epoch [1/50], Val Losses: mse: 9.0864, mae: 2.2390, huber: 1.8034, swd: 2.5445, ept: 55.9395
+    Epoch [1/50], Test Losses: mse: 10.1411, mae: 2.3649, huber: 1.9259, swd: 2.7350, ept: 54.5894
+      Epoch 1 composite train-obj: 2.261722
+            Val objective improved inf → 1.8034, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 7.8006, mae: 2.0558, huber: 1.6210, swd: 2.0107, ept: 56.7254
+    Epoch [2/50], Val Losses: mse: 8.4162, mae: 2.1075, huber: 1.6796, swd: 2.2770, ept: 59.4778
+    Epoch [2/50], Test Losses: mse: 9.2028, mae: 2.2015, huber: 1.7704, swd: 2.3298, ept: 58.7192
+      Epoch 2 composite train-obj: 1.621014
+            Val objective improved 1.8034 → 1.6796, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 6.4209, mae: 1.8241, huber: 1.4003, swd: 1.6032, ept: 64.6703
+    Epoch [3/50], Val Losses: mse: 8.2801, mae: 2.0787, huber: 1.6538, swd: 2.0064, ept: 60.1648
+    Epoch [3/50], Test Losses: mse: 8.7900, mae: 2.1252, huber: 1.6986, swd: 2.0356, ept: 60.7329
+      Epoch 3 composite train-obj: 1.400324
+            Val objective improved 1.6796 → 1.6538, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 5.2708, mae: 1.6256, huber: 1.2120, swd: 1.2775, ept: 70.7372
+    Epoch [4/50], Val Losses: mse: 8.8488, mae: 2.1586, huber: 1.7294, swd: 2.0978, ept: 59.9251
+    Epoch [4/50], Test Losses: mse: 8.4797, mae: 2.0850, huber: 1.6589, swd: 1.8273, ept: 62.0670
+      Epoch 4 composite train-obj: 1.211952
+            No improvement (1.7294), counter 1/5
+    Epoch [5/50], Train Losses: mse: 4.4015, mae: 1.4680, huber: 1.0631, swd: 1.0496, ept: 75.5589
+    Epoch [5/50], Val Losses: mse: 8.2979, mae: 2.0718, huber: 1.6457, swd: 1.8957, ept: 62.2785
+    Epoch [5/50], Test Losses: mse: 7.9514, mae: 2.0019, huber: 1.5803, swd: 1.7776, ept: 63.4204
+      Epoch 5 composite train-obj: 1.063089
+            Val objective improved 1.6538 → 1.6457, saving checkpoint.
+    Epoch [6/50], Train Losses: mse: 3.6046, mae: 1.3174, huber: 0.9216, swd: 0.8443, ept: 80.0402
+    Epoch [6/50], Val Losses: mse: 8.3548, mae: 2.0728, huber: 1.6465, swd: 1.9108, ept: 63.3965
+    Epoch [6/50], Test Losses: mse: 7.6718, mae: 1.9661, huber: 1.5449, swd: 1.7232, ept: 64.9784
+      Epoch 6 composite train-obj: 0.921588
+            No improvement (1.6465), counter 1/5
+    Epoch [7/50], Train Losses: mse: 2.9725, mae: 1.1911, huber: 0.8035, swd: 0.6969, ept: 83.7498
+    Epoch [7/50], Val Losses: mse: 8.5797, mae: 2.0771, huber: 1.6525, swd: 1.8876, ept: 63.8284
+    Epoch [7/50], Test Losses: mse: 7.5426, mae: 1.9369, huber: 1.5176, swd: 1.6477, ept: 66.3546
+      Epoch 7 composite train-obj: 0.803450
+            No improvement (1.6525), counter 2/5
+    Epoch [8/50], Train Losses: mse: 2.4317, mae: 1.0730, huber: 0.6949, swd: 0.5686, ept: 86.7378
+    Epoch [8/50], Val Losses: mse: 8.8201, mae: 2.1112, huber: 1.6850, swd: 1.8480, ept: 63.7201
+    Epoch [8/50], Test Losses: mse: 7.6858, mae: 1.9500, huber: 1.5316, swd: 1.6734, ept: 66.8819
+      Epoch 8 composite train-obj: 0.694908
+            No improvement (1.6850), counter 3/5
+    Epoch [9/50], Train Losses: mse: 2.0310, mae: 0.9822, huber: 0.6118, swd: 0.4756, ept: 89.0025
+    Epoch [9/50], Val Losses: mse: 8.8522, mae: 2.0921, huber: 1.6686, swd: 1.8770, ept: 64.8428
+    Epoch [9/50], Test Losses: mse: 7.6567, mae: 1.9405, huber: 1.5236, swd: 1.6808, ept: 67.7699
+      Epoch 9 composite train-obj: 0.611847
+            No improvement (1.6686), counter 4/5
+    Epoch [10/50], Train Losses: mse: 1.6870, mae: 0.8966, huber: 0.5351, swd: 0.3931, ept: 90.6762
+    Epoch [10/50], Val Losses: mse: 8.7121, mae: 2.0934, huber: 1.6703, swd: 1.8508, ept: 63.9272
+    Epoch [10/50], Test Losses: mse: 7.5378, mae: 1.9206, huber: 1.5043, swd: 1.6100, ept: 68.7735
+      Epoch 10 composite train-obj: 0.535091
+    Epoch [10/50], Test Losses: mse: 7.9514, mae: 2.0019, huber: 1.5803, swd: 1.7776, ept: 63.4204
+    Best round's Test MSE: 7.9514, MAE: 2.0019, SWD: 1.7776
+    Best round's Validation MSE: 8.2979, MAE: 2.0718, SWD: 1.8957
+    Best round's Test verification MSE : 7.9514, MAE: 2.0019, SWD: 1.7776
+    Time taken: 56.18 seconds
+    
+    ==================================================
+    Experiment Summary (TimeMixer_lorenz96_seq336_pred96_20250512_2222)
+    ==================================================
+    Number of runs: 3
+    Seeds: [1955, 7, 20]
+    
+    Test Performance at Best Validation (mean ± std):
+      mse: 8.2882 ± 0.7073
+      mae: 2.0426 ± 0.1227
+      huber: 1.6207 ± 0.1167
+      swd: 2.1169 ± 0.4048
+      ept: 64.6972 ± 4.0665
+      count: 12.0000 ± 0.0000
+    
+    Corresponding Validation Performance (mean ± std):
+      mse: 8.5921 ± 0.2436
+      mae: 2.1015 ± 0.0226
+      huber: 1.6752 ± 0.0223
+      swd: 2.2665 ± 0.2709
+      ept: 63.5768 ± 2.0473
+      count: 12.0000 ± 0.0000
+    ==================================================
+    Three seeds Time taken: 175.81 seconds
+    
+    Experiment complete: TimeMixer_lorenz96_seq336_pred96_20250512_2222
+    Model: TimeMixer
+    Dataset: lorenz96
+    Sequence Length: 336
+    Prediction Length: 96
+    Seeds: [1955, 7, 20]
+    
+
+##### huber + 0.5
+
+
+
+```python
+utils.reload_modules([utils])
+cfg = train_config.FlatTimeMixerConfig(
+    seq_len=336,
+    pred_len=96,
+    channels=data_mgr.datasets['lorenz96']['channels'],
+    enc_in=data_mgr.datasets['lorenz96']['channels'],
+    dec_in=data_mgr.datasets['lorenz96']['channels'],
+    c_out=data_mgr.datasets['lorenz96']['channels'],
+    batch_size=128,
+    learning_rate=9e-4,
+    seeds=[1955, 7, 20],
+    epochs=50, 
+    loss_backward_weights = [0.0, 0.0, 1.0, 0.5, 0.0],
+    loss_validate_weights = [0.0, 0.0, 1.0, 0.5, 0.0],
+)
+exp = execute_model_evaluation('lorenz96', cfg, data_mgr, scale=False)
+
+```
+
+    Reloading modules...
+      Reloaded: utils
+    Module reload complete.
+    Shape of training data: torch.Size([13300, 6])
+    Shape of validation data: torch.Size([1900, 6])
+    Shape of testing data: torch.Size([3800, 6])
+    global_std.shape: torch.Size([6])
+    Global Std for lorenz96: tensor([3.6750, 3.6678, 3.7240, 3.7347, 3.8038, 3.5588], device='cuda:0')
+    Train set sample shapes: torch.Size([336, 6]), torch.Size([96, 6])
+    Validation set sample shapes: torch.Size([336, 6]), torch.Size([96, 6])
+    Test set data shapes: torch.Size([3800, 6]), torch.Size([3800, 6])
+    Number of batches in train_loader: 101
+    Batch 0: Data shape torch.Size([128, 336, 6]), Target shape torch.Size([128, 96, 6])
+    
+    ==================================================
+    Data Preparation: lorenz96
+    ==================================================
+    Sequence Length: 336
+    Prediction Length: 96
+    Batch Size: 128
+    Scaling: No
+    Train Split: 0.7
+    Val Split: 0.8
+    Training Batches: 101
+    Validation Batches: 12
+    Test Batches: 27
+    ==================================================
+    
+    ==================================================
+     Running experiment with seed 1955 (1/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 13.6564, mae: 2.8303, huber: 2.3729, swd: 2.3080, ept: 24.7670
+    Epoch [1/50], Val Losses: mse: 10.1478, mae: 2.3793, huber: 1.9341, swd: 2.1794, ept: 44.8692
+    Epoch [1/50], Test Losses: mse: 11.2993, mae: 2.5221, huber: 2.0740, swd: 2.1394, ept: 42.4577
+      Epoch 1 composite train-obj: 3.526945
+            Val objective improved inf → 3.0238, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 9.0494, mae: 2.2074, huber: 1.7668, swd: 1.3377, ept: 47.1263
+    Epoch [2/50], Val Losses: mse: 9.3659, mae: 2.2549, huber: 1.8174, swd: 1.9549, ept: 50.8615
+    Epoch [2/50], Test Losses: mse: 10.5452, mae: 2.3896, huber: 1.9496, swd: 1.9650, ept: 48.5958
+      Epoch 2 composite train-obj: 2.435614
+            Val objective improved 3.0238 → 2.7948, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 7.6429, mae: 1.9924, huber: 1.5599, swd: 1.0053, ept: 55.3682
+    Epoch [3/50], Val Losses: mse: 9.4534, mae: 2.2443, huber: 1.8088, swd: 1.9766, ept: 53.0453
+    Epoch [3/50], Test Losses: mse: 10.0167, mae: 2.2922, huber: 1.8557, swd: 1.7755, ept: 53.1102
+      Epoch 3 composite train-obj: 2.062514
+            No improvement (2.7971), counter 1/5
+    Epoch [4/50], Train Losses: mse: 6.4585, mae: 1.8024, huber: 1.3780, swd: 0.7647, ept: 62.3206
+    Epoch [4/50], Val Losses: mse: 8.9916, mae: 2.2083, huber: 1.7723, swd: 1.9215, ept: 54.4260
+    Epoch [4/50], Test Losses: mse: 9.3294, mae: 2.2106, huber: 1.7753, swd: 1.7410, ept: 55.7075
+      Epoch 4 composite train-obj: 1.760324
+            Val objective improved 2.7948 → 2.7331, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 5.5047, mae: 1.6422, huber: 1.2256, swd: 0.6095, ept: 67.9551
+    Epoch [5/50], Val Losses: mse: 9.1466, mae: 2.2193, huber: 1.7840, swd: 2.0294, ept: 57.0844
+    Epoch [5/50], Test Losses: mse: 9.0090, mae: 2.1605, huber: 1.7279, swd: 1.7256, ept: 58.2165
+      Epoch 5 composite train-obj: 1.530361
+            No improvement (2.7987), counter 1/5
+    Epoch [6/50], Train Losses: mse: 4.7348, mae: 1.5073, huber: 1.0977, swd: 0.5001, ept: 72.8726
+    Epoch [6/50], Val Losses: mse: 9.2230, mae: 2.2221, huber: 1.7886, swd: 2.0250, ept: 57.0149
+    Epoch [6/50], Test Losses: mse: 8.7729, mae: 2.1209, huber: 1.6911, swd: 1.7057, ept: 59.2351
+      Epoch 6 composite train-obj: 1.347746
+            No improvement (2.8011), counter 2/5
+    Epoch [7/50], Train Losses: mse: 4.0357, mae: 1.3805, huber: 0.9785, swd: 0.4147, ept: 76.8650
+    Epoch [7/50], Val Losses: mse: 8.9820, mae: 2.1920, huber: 1.7599, swd: 2.0760, ept: 58.9760
+    Epoch [7/50], Test Losses: mse: 8.6151, mae: 2.0901, huber: 1.6630, swd: 1.7753, ept: 60.9728
+      Epoch 7 composite train-obj: 1.185875
+            No improvement (2.7979), counter 3/5
+    Epoch [8/50], Train Losses: mse: 3.4311, mae: 1.2660, huber: 0.8715, swd: 0.3510, ept: 80.5081
+    Epoch [8/50], Val Losses: mse: 9.0271, mae: 2.1968, huber: 1.7656, swd: 2.0017, ept: 58.6115
+    Epoch [8/50], Test Losses: mse: 8.3047, mae: 2.0565, huber: 1.6308, swd: 1.7433, ept: 62.1736
+      Epoch 8 composite train-obj: 1.047020
+            No improvement (2.7664), counter 4/5
+    Epoch [9/50], Train Losses: mse: 2.8969, mae: 1.1605, huber: 0.7734, swd: 0.3083, ept: 83.7637
+    Epoch [9/50], Val Losses: mse: 9.0895, mae: 2.1988, huber: 1.7670, swd: 2.0271, ept: 59.4499
+    Epoch [9/50], Test Losses: mse: 8.3236, mae: 2.0538, huber: 1.6285, swd: 1.7530, ept: 62.9489
+      Epoch 9 composite train-obj: 0.927584
+    Epoch [9/50], Test Losses: mse: 9.3294, mae: 2.2106, huber: 1.7753, swd: 1.7410, ept: 55.7075
+    Best round's Test MSE: 9.3294, MAE: 2.2106, SWD: 1.7410
+    Best round's Validation MSE: 8.9916, MAE: 2.2083, SWD: 1.9215
+    Best round's Test verification MSE : 9.3294, MAE: 2.2106, SWD: 1.7410
+    Time taken: 44.35 seconds
+    
+    ==================================================
+     Running experiment with seed 7 (2/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 13.2459, mae: 2.7799, huber: 2.3231, swd: 1.9878, ept: 24.6894
+    Epoch [1/50], Val Losses: mse: 10.0817, mae: 2.3668, huber: 1.9244, swd: 2.0881, ept: 48.7815
+    Epoch [1/50], Test Losses: mse: 11.0978, mae: 2.4650, huber: 2.0210, swd: 1.9488, ept: 45.5966
+      Epoch 1 composite train-obj: 3.317014
+            Val objective improved inf → 2.9685, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 8.3250, mae: 2.1182, huber: 1.6789, swd: 1.1487, ept: 49.3484
+    Epoch [2/50], Val Losses: mse: 9.5733, mae: 2.2650, huber: 1.8289, swd: 1.9941, ept: 53.5197
+    Epoch [2/50], Test Losses: mse: 10.1036, mae: 2.2897, huber: 1.8537, swd: 1.7998, ept: 54.4307
+      Epoch 2 composite train-obj: 2.253266
+            Val objective improved 2.9685 → 2.8260, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 6.7026, mae: 1.8507, huber: 1.4231, swd: 0.8208, ept: 60.7618
+    Epoch [3/50], Val Losses: mse: 9.1540, mae: 2.2168, huber: 1.7806, swd: 2.0012, ept: 56.4956
+    Epoch [3/50], Test Losses: mse: 9.6714, mae: 2.2376, huber: 1.8027, swd: 1.8352, ept: 56.2986
+      Epoch 3 composite train-obj: 1.833543
+            Val objective improved 2.8260 → 2.7812, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 5.5609, mae: 1.6545, huber: 1.2370, swd: 0.6258, ept: 68.2392
+    Epoch [4/50], Val Losses: mse: 8.8860, mae: 2.1646, huber: 1.7321, swd: 1.9744, ept: 59.4393
+    Epoch [4/50], Test Losses: mse: 8.8762, mae: 2.1282, huber: 1.6983, swd: 1.7024, ept: 59.1541
+      Epoch 4 composite train-obj: 1.549884
+            Val objective improved 2.7812 → 2.7193, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 4.5831, mae: 1.4827, huber: 1.0748, swd: 0.4942, ept: 74.1986
+    Epoch [5/50], Val Losses: mse: 8.6514, mae: 2.1130, huber: 1.6815, swd: 1.9351, ept: 61.7809
+    Epoch [5/50], Test Losses: mse: 8.5833, mae: 2.0841, huber: 1.6580, swd: 1.7537, ept: 61.5983
+      Epoch 5 composite train-obj: 1.321903
+            Val objective improved 2.7193 → 2.6491, saving checkpoint.
+    Epoch [6/50], Train Losses: mse: 3.7286, mae: 1.3259, huber: 0.9275, swd: 0.3977, ept: 79.2865
+    Epoch [6/50], Val Losses: mse: 8.6697, mae: 2.1225, huber: 1.6930, swd: 2.0475, ept: 62.0336
+    Epoch [6/50], Test Losses: mse: 8.2731, mae: 2.0520, huber: 1.6257, swd: 1.7369, ept: 62.8722
+      Epoch 6 composite train-obj: 1.126370
+            No improvement (2.7167), counter 1/5
+    Epoch [7/50], Train Losses: mse: 3.0062, mae: 1.1869, huber: 0.7980, swd: 0.3310, ept: 83.4002
+    Epoch [7/50], Val Losses: mse: 8.6678, mae: 2.1133, huber: 1.6860, swd: 2.0825, ept: 62.7024
+    Epoch [7/50], Test Losses: mse: 8.2088, mae: 2.0206, huber: 1.5983, swd: 1.7832, ept: 64.8322
+      Epoch 7 composite train-obj: 0.963507
+            No improvement (2.7272), counter 2/5
+    Epoch [8/50], Train Losses: mse: 2.4264, mae: 1.0657, huber: 0.6861, swd: 0.2741, ept: 86.7315
+    Epoch [8/50], Val Losses: mse: 8.7841, mae: 2.1303, huber: 1.7017, swd: 2.1234, ept: 62.5156
+    Epoch [8/50], Test Losses: mse: 8.2399, mae: 2.0135, huber: 1.5924, swd: 1.8134, ept: 66.2365
+      Epoch 8 composite train-obj: 0.823190
+            No improvement (2.7634), counter 3/5
+    Epoch [9/50], Train Losses: mse: 1.9689, mae: 0.9619, huber: 0.5920, swd: 0.2357, ept: 89.1687
+    Epoch [9/50], Val Losses: mse: 8.9936, mae: 2.1328, huber: 1.7045, swd: 2.1308, ept: 63.7281
+    Epoch [9/50], Test Losses: mse: 8.1626, mae: 1.9989, huber: 1.5788, swd: 1.8325, ept: 66.5807
+      Epoch 9 composite train-obj: 0.709893
+            No improvement (2.7699), counter 4/5
+    Epoch [10/50], Train Losses: mse: 1.6171, mae: 0.8742, huber: 0.5139, swd: 0.2048, ept: 90.9830
+    Epoch [10/50], Val Losses: mse: 9.1780, mae: 2.1487, huber: 1.7226, swd: 2.0951, ept: 64.3176
+    Epoch [10/50], Test Losses: mse: 8.2451, mae: 2.0047, huber: 1.5855, swd: 1.8255, ept: 67.3481
+      Epoch 10 composite train-obj: 0.616345
+    Epoch [10/50], Test Losses: mse: 8.5833, mae: 2.0841, huber: 1.6580, swd: 1.7537, ept: 61.5983
+    Best round's Test MSE: 8.5833, MAE: 2.0841, SWD: 1.7537
+    Best round's Validation MSE: 8.6514, MAE: 2.1130, SWD: 1.9351
+    Best round's Test verification MSE : 8.5833, MAE: 2.0841, SWD: 1.7537
+    Time taken: 49.21 seconds
+    
+    ==================================================
+     Running experiment with seed 20 (3/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 16.2589, mae: 3.0872, huber: 2.6257, swd: 2.0146, ept: 16.9287
+    Epoch [1/50], Val Losses: mse: 10.1608, mae: 2.3843, huber: 1.9398, swd: 1.9746, ept: 44.6390
+    Epoch [1/50], Test Losses: mse: 11.5183, mae: 2.5283, huber: 2.0816, swd: 1.9594, ept: 41.5393
+      Epoch 1 composite train-obj: 3.633015
+            Val objective improved inf → 2.9271, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 9.4510, mae: 2.2853, huber: 1.8403, swd: 1.2141, ept: 39.6444
+    Epoch [2/50], Val Losses: mse: 9.4415, mae: 2.2695, huber: 1.8298, swd: 1.6964, ept: 50.1228
+    Epoch [2/50], Test Losses: mse: 10.3300, mae: 2.3493, huber: 1.9086, swd: 1.5953, ept: 49.0783
+      Epoch 2 composite train-obj: 2.447383
+            Val objective improved 2.9271 → 2.6780, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 7.6325, mae: 2.0107, huber: 1.5754, swd: 0.8926, ept: 51.3908
+    Epoch [3/50], Val Losses: mse: 9.0513, mae: 2.2116, huber: 1.7765, swd: 1.6897, ept: 52.4282
+    Epoch [3/50], Test Losses: mse: 9.6695, mae: 2.2415, huber: 1.8072, swd: 1.5838, ept: 53.5967
+      Epoch 3 composite train-obj: 2.021679
+            Val objective improved 2.6780 → 2.6214, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 6.4015, mae: 1.8070, huber: 1.3807, swd: 0.6829, ept: 60.2474
+    Epoch [4/50], Val Losses: mse: 8.7666, mae: 2.1713, huber: 1.7376, swd: 1.7580, ept: 55.5313
+    Epoch [4/50], Test Losses: mse: 9.0066, mae: 2.1473, huber: 1.7156, swd: 1.4861, ept: 57.3312
+      Epoch 4 composite train-obj: 1.722178
+            Val objective improved 2.6214 → 2.6166, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 5.4096, mae: 1.6339, huber: 1.2164, swd: 0.5359, ept: 67.3140
+    Epoch [5/50], Val Losses: mse: 8.5742, mae: 2.1305, huber: 1.6986, swd: 1.6475, ept: 57.9866
+    Epoch [5/50], Test Losses: mse: 8.7155, mae: 2.1075, huber: 1.6782, swd: 1.4993, ept: 59.1988
+      Epoch 5 composite train-obj: 1.484397
+            Val objective improved 2.6166 → 2.5223, saving checkpoint.
+    Epoch [6/50], Train Losses: mse: 4.5865, mae: 1.4864, huber: 1.0771, swd: 0.4323, ept: 72.9720
+    Epoch [6/50], Val Losses: mse: 8.3906, mae: 2.1052, huber: 1.6748, swd: 1.7317, ept: 59.2656
+    Epoch [6/50], Test Losses: mse: 8.2902, mae: 2.0524, huber: 1.6263, swd: 1.5481, ept: 60.7021
+      Epoch 6 composite train-obj: 1.293211
+            No improvement (2.5407), counter 1/5
+    Epoch [7/50], Train Losses: mse: 3.8998, mae: 1.3567, huber: 0.9554, swd: 0.3634, ept: 77.6750
+    Epoch [7/50], Val Losses: mse: 8.6449, mae: 2.1241, huber: 1.6934, swd: 1.6957, ept: 59.8088
+    Epoch [7/50], Test Losses: mse: 8.0911, mae: 2.0164, huber: 1.5916, swd: 1.5209, ept: 62.6195
+      Epoch 7 composite train-obj: 1.137115
+            No improvement (2.5412), counter 2/5
+    Epoch [8/50], Train Losses: mse: 3.2864, mae: 1.2363, huber: 0.8438, swd: 0.3069, ept: 81.5081
+    Epoch [8/50], Val Losses: mse: 8.6245, mae: 2.1191, huber: 1.6902, swd: 1.7404, ept: 61.1424
+    Epoch [8/50], Test Losses: mse: 8.0535, mae: 2.0116, huber: 1.5891, swd: 1.5498, ept: 63.0543
+      Epoch 8 composite train-obj: 0.997246
+            No improvement (2.5604), counter 3/5
+    Epoch [9/50], Train Losses: mse: 2.7783, mae: 1.1328, huber: 0.7481, swd: 0.2668, ept: 84.5995
+    Epoch [9/50], Val Losses: mse: 8.8376, mae: 2.1309, huber: 1.7027, swd: 1.7498, ept: 61.5862
+    Epoch [9/50], Test Losses: mse: 8.0575, mae: 2.0006, huber: 1.5790, swd: 1.5133, ept: 64.0927
+      Epoch 9 composite train-obj: 0.881505
+            No improvement (2.5776), counter 4/5
+    Epoch [10/50], Train Losses: mse: 2.3332, mae: 1.0375, huber: 0.6613, swd: 0.2316, ept: 87.0659
+    Epoch [10/50], Val Losses: mse: 9.0255, mae: 2.1583, huber: 1.7293, swd: 1.7720, ept: 61.4918
+    Epoch [10/50], Test Losses: mse: 7.7898, mae: 1.9633, huber: 1.5435, swd: 1.5751, ept: 65.4110
+      Epoch 10 composite train-obj: 0.777031
+    Epoch [10/50], Test Losses: mse: 8.7155, mae: 2.1075, huber: 1.6782, swd: 1.4993, ept: 59.1988
+    Best round's Test MSE: 8.7155, MAE: 2.1075, SWD: 1.4993
+    Best round's Validation MSE: 8.5742, MAE: 2.1305, SWD: 1.6475
+    Best round's Test verification MSE : 8.7155, MAE: 2.1075, SWD: 1.4993
+    Time taken: 49.54 seconds
+    
+    ==================================================
+    Experiment Summary (TimeMixer_lorenz96_seq336_pred96_20250513_0008)
+    ==================================================
+    Number of runs: 3
+    Seeds: [1955, 7, 20]
+    
+    Test Performance at Best Validation (mean ± std):
+      mse: 8.8761 ± 0.3250
+      mae: 2.1341 ± 0.0550
+      huber: 1.7039 ± 0.0512
+      swd: 1.6647 ± 0.1171
+      ept: 58.8349 ± 2.4186
+      count: 12.0000 ± 0.0000
+    
+    Corresponding Validation Performance (mean ± std):
+      mse: 8.7391 ± 0.1813
+      mae: 2.1506 ± 0.0414
+      huber: 1.7175 ± 0.0394
+      swd: 1.8347 ± 0.1325
+      ept: 58.0645 ± 3.0031
+      count: 12.0000 ± 0.0000
+    ==================================================
+    Three seeds Time taken: 143.17 seconds
+    
+    Experiment complete: TimeMixer_lorenz96_seq336_pred96_20250513_0008
+    Model: TimeMixer
+    Dataset: lorenz96
+    Sequence Length: 336
+    Prediction Length: 96
+    Seeds: [1955, 7, 20]
+    
+
+#### pred=196
+
+##### huber
+
+
+```python
+utils.reload_modules([utils])
+cfg = train_config.FlatTimeMixerConfig(
+    seq_len=336,
+    pred_len=196,
+    channels=data_mgr.datasets['lorenz96']['channels'],
+    enc_in=data_mgr.datasets['lorenz96']['channels'],
+    dec_in=data_mgr.datasets['lorenz96']['channels'],
+    c_out=data_mgr.datasets['lorenz96']['channels'],
+    batch_size=128,
+    learning_rate=9e-4,
+    seeds=[1955, 7, 20],
+    epochs=50, 
+)
+exp_mixer_96_96 = execute_model_evaluation('lorenz96', cfg, data_mgr, scale=False)
+
+```
+
+    Reloading modules...
+      Reloaded: utils
+    Module reload complete.
+    Shape of training data: torch.Size([13300, 6])
+    Shape of validation data: torch.Size([1900, 6])
+    Shape of testing data: torch.Size([3800, 6])
+    global_std.shape: torch.Size([6])
+    Global Std for lorenz96: tensor([3.6750, 3.6678, 3.7240, 3.7347, 3.8038, 3.5588], device='cuda:0')
+    Train set sample shapes: torch.Size([336, 6]), torch.Size([196, 6])
+    Validation set sample shapes: torch.Size([336, 6]), torch.Size([196, 6])
+    Test set data shapes: torch.Size([3800, 6]), torch.Size([3800, 6])
+    Number of batches in train_loader: 100
+    Batch 0: Data shape torch.Size([128, 336, 6]), Target shape torch.Size([128, 196, 6])
+    
+    ==================================================
+    Data Preparation: lorenz96
+    ==================================================
+    Sequence Length: 336
+    Prediction Length: 196
+    Batch Size: 128
+    Scaling: No
+    Train Split: 0.7
+    Val Split: 0.8
+    Training Batches: 100
+    Validation Batches: 11
+    Test Batches: 26
+    ==================================================
+    
+    ==================================================
+     Running experiment with seed 1955 (1/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 12.5751, mae: 2.7775, huber: 2.3188, swd: 3.1746, ept: 42.6227
+    Epoch [1/50], Val Losses: mse: 11.7269, mae: 2.6341, huber: 2.1818, swd: 3.0914, ept: 65.7876
+    Epoch [1/50], Test Losses: mse: 12.4069, mae: 2.7222, huber: 2.2691, swd: 2.8037, ept: 62.5254
+      Epoch 1 composite train-obj: 2.318813
+            Val objective improved inf → 2.1818, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 9.4355, mae: 2.3299, huber: 1.8841, swd: 2.1259, ept: 72.3028
+    Epoch [2/50], Val Losses: mse: 11.4828, mae: 2.5857, huber: 2.1367, swd: 2.4096, ept: 68.9913
+    Epoch [2/50], Test Losses: mse: 11.9820, mae: 2.6306, huber: 2.1808, swd: 2.2432, ept: 68.5993
+      Epoch 2 composite train-obj: 1.884123
+            Val objective improved 2.1818 → 2.1367, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 7.7542, mae: 2.0591, huber: 1.6236, swd: 1.5827, ept: 91.2363
+    Epoch [3/50], Val Losses: mse: 11.9691, mae: 2.6586, huber: 2.2080, swd: 2.2226, ept: 68.2592
+    Epoch [3/50], Test Losses: mse: 11.7181, mae: 2.5703, huber: 2.1246, swd: 2.0468, ept: 72.9054
+      Epoch 3 composite train-obj: 1.623641
+            No improvement (2.2080), counter 1/5
+    Epoch [4/50], Train Losses: mse: 6.4197, mae: 1.8342, huber: 1.4084, swd: 1.2511, ept: 107.3396
+    Epoch [4/50], Val Losses: mse: 11.9078, mae: 2.6444, huber: 2.1943, swd: 2.1811, ept: 69.9383
+    Epoch [4/50], Test Losses: mse: 11.4993, mae: 2.5316, huber: 2.0867, swd: 2.0420, ept: 76.2500
+      Epoch 4 composite train-obj: 1.408425
+            No improvement (2.1943), counter 2/5
+    Epoch [5/50], Train Losses: mse: 5.2670, mae: 1.6343, huber: 1.2177, swd: 1.0087, ept: 122.5573
+    Epoch [5/50], Val Losses: mse: 12.2234, mae: 2.6699, huber: 2.2194, swd: 2.1434, ept: 70.7560
+    Epoch [5/50], Test Losses: mse: 11.7807, mae: 2.5392, huber: 2.0945, swd: 2.0849, ept: 80.0264
+      Epoch 5 composite train-obj: 1.217717
+            No improvement (2.2194), counter 3/5
+    Epoch [6/50], Train Losses: mse: 4.2880, mae: 1.4582, huber: 1.0503, swd: 0.8127, ept: 136.9266
+    Epoch [6/50], Val Losses: mse: 12.6951, mae: 2.7272, huber: 2.2754, swd: 2.0609, ept: 70.5278
+    Epoch [6/50], Test Losses: mse: 11.9967, mae: 2.5593, huber: 2.1146, swd: 2.0426, ept: 81.4808
+      Epoch 6 composite train-obj: 1.050312
+            No improvement (2.2754), counter 4/5
+    Epoch [7/50], Train Losses: mse: 3.4733, mae: 1.3017, huber: 0.9027, swd: 0.6489, ept: 150.3438
+    Epoch [7/50], Val Losses: mse: 13.0106, mae: 2.7611, huber: 2.3088, swd: 2.0105, ept: 69.6901
+    Epoch [7/50], Test Losses: mse: 12.2553, mae: 2.5777, huber: 2.1337, swd: 1.9174, ept: 84.2988
+      Epoch 7 composite train-obj: 0.902694
+    Epoch [7/50], Test Losses: mse: 11.9820, mae: 2.6306, huber: 2.1808, swd: 2.2432, ept: 68.5993
+    Best round's Test MSE: 11.9820, MAE: 2.6306, SWD: 2.2432
+    Best round's Validation MSE: 11.4828, MAE: 2.5857, SWD: 2.4096
+    Best round's Test verification MSE : 11.9820, MAE: 2.6306, SWD: 2.2432
+    Time taken: 40.24 seconds
+    
+    ==================================================
+     Running experiment with seed 7 (2/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 12.3298, mae: 2.7465, huber: 2.2885, swd: 3.1823, ept: 47.7058
+    Epoch [1/50], Val Losses: mse: 11.5397, mae: 2.6202, huber: 2.1673, swd: 3.1130, ept: 66.5535
+    Epoch [1/50], Test Losses: mse: 12.1850, mae: 2.7082, huber: 2.2543, swd: 2.8143, ept: 62.8081
+      Epoch 1 composite train-obj: 2.288491
+            Val objective improved inf → 2.1673, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 9.1489, mae: 2.2899, huber: 1.8452, swd: 2.0598, ept: 78.8406
+    Epoch [2/50], Val Losses: mse: 11.4568, mae: 2.5732, huber: 2.1252, swd: 2.3074, ept: 71.0335
+    Epoch [2/50], Test Losses: mse: 11.9525, mae: 2.6246, huber: 2.1755, swd: 2.1303, ept: 72.1120
+      Epoch 2 composite train-obj: 1.845160
+            Val objective improved 2.1673 → 2.1252, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 7.3564, mae: 1.9952, huber: 1.5623, swd: 1.4895, ept: 99.1897
+    Epoch [3/50], Val Losses: mse: 11.2844, mae: 2.5616, huber: 2.1128, swd: 2.5929, ept: 74.0000
+    Epoch [3/50], Test Losses: mse: 11.5136, mae: 2.5384, huber: 2.0937, swd: 2.5803, ept: 78.2454
+      Epoch 3 composite train-obj: 1.562311
+            Val objective improved 2.1252 → 2.1128, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 5.9220, mae: 1.7513, huber: 1.3290, swd: 1.1484, ept: 116.2662
+    Epoch [4/50], Val Losses: mse: 11.6341, mae: 2.5999, huber: 2.1505, swd: 2.1745, ept: 73.7812
+    Epoch [4/50], Test Losses: mse: 11.4533, mae: 2.5180, huber: 2.0746, swd: 2.0689, ept: 81.5816
+      Epoch 4 composite train-obj: 1.329031
+            No improvement (2.1505), counter 1/5
+    Epoch [5/50], Train Losses: mse: 4.7831, mae: 1.5517, huber: 1.1386, swd: 0.8925, ept: 131.1014
+    Epoch [5/50], Val Losses: mse: 12.1311, mae: 2.6463, huber: 2.1975, swd: 2.0023, ept: 73.9030
+    Epoch [5/50], Test Losses: mse: 11.6175, mae: 2.5175, huber: 2.0745, swd: 1.9332, ept: 83.7813
+      Epoch 5 composite train-obj: 1.138607
+            No improvement (2.1975), counter 2/5
+    Epoch [6/50], Train Losses: mse: 3.8812, mae: 1.3847, huber: 0.9805, swd: 0.7026, ept: 143.5686
+    Epoch [6/50], Val Losses: mse: 12.4883, mae: 2.6896, huber: 2.2389, swd: 2.0020, ept: 72.3941
+    Epoch [6/50], Test Losses: mse: 11.7173, mae: 2.5253, huber: 2.0820, swd: 1.8658, ept: 86.4519
+      Epoch 6 composite train-obj: 0.980481
+            No improvement (2.2389), counter 3/5
+    Epoch [7/50], Train Losses: mse: 3.1803, mae: 1.2497, huber: 0.8534, swd: 0.5702, ept: 154.0988
+    Epoch [7/50], Val Losses: mse: 12.8262, mae: 2.7202, huber: 2.2681, swd: 1.9434, ept: 72.5342
+    Epoch [7/50], Test Losses: mse: 11.8845, mae: 2.5325, huber: 2.0896, swd: 1.8331, ept: 86.6134
+      Epoch 7 composite train-obj: 0.853433
+            No improvement (2.2681), counter 4/5
+    Epoch [8/50], Train Losses: mse: 2.6571, mae: 1.1424, huber: 0.7534, swd: 0.4750, ept: 162.1506
+    Epoch [8/50], Val Losses: mse: 13.0216, mae: 2.7410, huber: 2.2891, swd: 2.0235, ept: 72.9757
+    Epoch [8/50], Test Losses: mse: 12.0517, mae: 2.5542, huber: 2.1108, swd: 1.8775, ept: 86.7024
+      Epoch 8 composite train-obj: 0.753373
+    Epoch [8/50], Test Losses: mse: 11.5136, mae: 2.5384, huber: 2.0937, swd: 2.5803, ept: 78.2454
+    Best round's Test MSE: 11.5136, MAE: 2.5384, SWD: 2.5803
+    Best round's Validation MSE: 11.2844, MAE: 2.5616, SWD: 2.5929
+    Best round's Test verification MSE : 11.5136, MAE: 2.5384, SWD: 2.5803
+    Time taken: 43.99 seconds
+    
+    ==================================================
+     Running experiment with seed 20 (3/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 12.1773, mae: 2.7324, huber: 2.2745, swd: 3.0351, ept: 47.0566
+    Epoch [1/50], Val Losses: mse: 11.4793, mae: 2.5997, huber: 2.1482, swd: 2.8118, ept: 69.8014
+    Epoch [1/50], Test Losses: mse: 12.0844, mae: 2.6797, huber: 2.2278, swd: 2.4912, ept: 67.2544
+      Epoch 1 composite train-obj: 2.274478
+            Val objective improved inf → 2.1482, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 9.2981, mae: 2.3145, huber: 1.8689, swd: 2.0182, ept: 76.9111
+    Epoch [2/50], Val Losses: mse: 11.2600, mae: 2.5540, huber: 2.1051, swd: 2.4514, ept: 70.7436
+    Epoch [2/50], Test Losses: mse: 11.8193, mae: 2.6201, huber: 2.1700, swd: 2.3285, ept: 71.5491
+      Epoch 2 composite train-obj: 1.868926
+            Val objective improved 2.1482 → 2.1051, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 7.8774, mae: 2.0881, huber: 1.6509, swd: 1.6036, ept: 91.6696
+    Epoch [3/50], Val Losses: mse: 11.5741, mae: 2.5934, huber: 2.1451, swd: 2.1020, ept: 69.2158
+    Epoch [3/50], Test Losses: mse: 11.6336, mae: 2.5688, huber: 2.1223, swd: 2.0314, ept: 73.7642
+      Epoch 3 composite train-obj: 1.650885
+            No improvement (2.1451), counter 1/5
+    Epoch [4/50], Train Losses: mse: 6.6832, mae: 1.8894, huber: 1.4600, swd: 1.3012, ept: 104.7234
+    Epoch [4/50], Val Losses: mse: 11.8218, mae: 2.6236, huber: 2.1746, swd: 2.0759, ept: 69.8290
+    Epoch [4/50], Test Losses: mse: 11.4115, mae: 2.5257, huber: 2.0814, swd: 2.0471, ept: 77.2449
+      Epoch 4 composite train-obj: 1.459958
+            No improvement (2.1746), counter 2/5
+    Epoch [5/50], Train Losses: mse: 5.5930, mae: 1.7007, huber: 1.2797, swd: 1.0554, ept: 118.0400
+    Epoch [5/50], Val Losses: mse: 12.0489, mae: 2.6590, huber: 2.2083, swd: 1.9995, ept: 72.1010
+    Epoch [5/50], Test Losses: mse: 11.4643, mae: 2.5219, huber: 2.0787, swd: 1.9261, ept: 79.5751
+      Epoch 5 composite train-obj: 1.279732
+            No improvement (2.2083), counter 3/5
+    Epoch [6/50], Train Losses: mse: 4.6121, mae: 1.5274, huber: 1.1147, swd: 0.8531, ept: 131.2150
+    Epoch [6/50], Val Losses: mse: 12.4801, mae: 2.6873, huber: 2.2372, swd: 1.8537, ept: 72.8906
+    Epoch [6/50], Test Losses: mse: 11.9370, mae: 2.5652, huber: 2.1208, swd: 1.9080, ept: 80.2860
+      Epoch 6 composite train-obj: 1.114675
+            No improvement (2.2372), counter 4/5
+    Epoch [7/50], Train Losses: mse: 3.7679, mae: 1.3688, huber: 0.9643, swd: 0.6816, ept: 144.8302
+    Epoch [7/50], Val Losses: mse: 13.1840, mae: 2.7747, huber: 2.3220, swd: 1.8262, ept: 70.7417
+    Epoch [7/50], Test Losses: mse: 12.2178, mae: 2.5839, huber: 2.1400, swd: 1.7407, ept: 83.1825
+      Epoch 7 composite train-obj: 0.964334
+    Epoch [7/50], Test Losses: mse: 11.8193, mae: 2.6201, huber: 2.1700, swd: 2.3285, ept: 71.5491
+    Best round's Test MSE: 11.8193, MAE: 2.6201, SWD: 2.3285
+    Best round's Validation MSE: 11.2600, MAE: 2.5540, SWD: 2.4514
+    Best round's Test verification MSE : 11.8193, MAE: 2.6201, SWD: 2.3285
+    Time taken: 38.01 seconds
+    
+    ==================================================
+    Experiment Summary (TimeMixer_lorenz96_seq336_pred196_20250512_2225)
+    ==================================================
+    Number of runs: 3
+    Seeds: [1955, 7, 20]
+    
+    Test Performance at Best Validation (mean ± std):
+      mse: 11.7716 ± 0.1942
+      mae: 2.5964 ± 0.0412
+      huber: 2.1482 ± 0.0388
+      swd: 2.3840 ± 0.1431
+      ept: 72.7980 ± 4.0358
+      count: 11.0000 ± 0.0000
+    
+    Corresponding Validation Performance (mean ± std):
+      mse: 11.3424 ± 0.0998
+      mae: 2.5671 ± 0.0135
+      huber: 2.1182 ± 0.0134
+      swd: 2.4847 ± 0.0784
+      ept: 71.2450 ± 2.0753
+      count: 11.0000 ± 0.0000
+    ==================================================
+    Three seeds Time taken: 122.31 seconds
+    
+    Experiment complete: TimeMixer_lorenz96_seq336_pred196_20250512_2225
+    Model: TimeMixer
+    Dataset: lorenz96
+    Sequence Length: 336
+    Prediction Length: 196
+    Seeds: [1955, 7, 20]
+    
+
+##### huber + 0.5
+
+
+```python
+utils.reload_modules([utils])
+cfg = train_config.FlatTimeMixerConfig(
+    seq_len=336,
+    pred_len=196,
+    channels=data_mgr.datasets['lorenz96']['channels'],
+    enc_in=data_mgr.datasets['lorenz96']['channels'],
+    dec_in=data_mgr.datasets['lorenz96']['channels'],
+    c_out=data_mgr.datasets['lorenz96']['channels'],
+    batch_size=128,
+    learning_rate=9e-4,
+    seeds=[1955, 7, 20],
+    epochs=50, 
+    loss_backward_weights = [0.0, 0.0, 1.0, 0.5, 0.0],
+    loss_validate_weights = [0.0, 0.0, 1.0, 0.5, 0.0],
+)
+exp = execute_model_evaluation('lorenz96', cfg, data_mgr, scale=False)
+
+```
+
+    Reloading modules...
+      Reloaded: utils
+    Module reload complete.
+    Shape of training data: torch.Size([13300, 6])
+    Shape of validation data: torch.Size([1900, 6])
+    Shape of testing data: torch.Size([3800, 6])
+    global_std.shape: torch.Size([6])
+    Global Std for lorenz96: tensor([3.6750, 3.6678, 3.7240, 3.7347, 3.8038, 3.5588], device='cuda:0')
+    Train set sample shapes: torch.Size([336, 6]), torch.Size([196, 6])
+    Validation set sample shapes: torch.Size([336, 6]), torch.Size([196, 6])
+    Test set data shapes: torch.Size([3800, 6]), torch.Size([3800, 6])
+    Number of batches in train_loader: 100
+    Batch 0: Data shape torch.Size([128, 336, 6]), Target shape torch.Size([128, 196, 6])
+    
+    ==================================================
+    Data Preparation: lorenz96
+    ==================================================
+    Sequence Length: 336
+    Prediction Length: 196
+    Batch Size: 128
+    Scaling: No
+    Train Split: 0.7
+    Val Split: 0.8
+    Training Batches: 100
+    Validation Batches: 11
+    Test Batches: 26
+    ==================================================
+    
+    ==================================================
+     Running experiment with seed 1955 (1/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 15.1500, mae: 3.0350, huber: 2.5728, swd: 1.4901, ept: 24.5647
+    Epoch [1/50], Val Losses: mse: 13.4733, mae: 2.8265, huber: 2.3707, swd: 2.0419, ept: 44.1920
+    Epoch [1/50], Test Losses: mse: 14.6190, mae: 2.9482, huber: 2.4903, swd: 1.6458, ept: 41.4038
+      Epoch 1 composite train-obj: 3.317853
+            Val objective improved inf → 3.3917, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 11.5605, mae: 2.5915, huber: 2.1386, swd: 1.0007, ept: 45.6371
+    Epoch [2/50], Val Losses: mse: 12.5968, mae: 2.7238, huber: 2.2698, swd: 1.7543, ept: 50.3549
+    Epoch [2/50], Test Losses: mse: 13.8076, mae: 2.8477, huber: 2.3922, swd: 1.5031, ept: 47.9520
+      Epoch 2 composite train-obj: 2.638942
+            Val objective improved 3.3917 → 3.1469, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 10.0264, mae: 2.3754, huber: 1.9287, swd: 0.7511, ept: 57.9917
+    Epoch [3/50], Val Losses: mse: 12.3927, mae: 2.6955, huber: 2.2428, swd: 1.7189, ept: 51.9739
+    Epoch [3/50], Test Losses: mse: 13.4236, mae: 2.7870, huber: 2.3336, swd: 1.4713, ept: 52.1293
+      Epoch 3 composite train-obj: 2.304299
+            Val objective improved 3.1469 → 3.1023, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 8.7299, mae: 2.1811, huber: 1.7408, swd: 0.5745, ept: 70.6982
+    Epoch [4/50], Val Losses: mse: 12.0402, mae: 2.6608, huber: 2.2091, swd: 1.6990, ept: 55.4032
+    Epoch [4/50], Test Losses: mse: 12.6597, mae: 2.6909, huber: 2.2400, swd: 1.4506, ept: 58.4312
+      Epoch 4 composite train-obj: 2.028034
+            Val objective improved 3.1023 → 3.0586, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 7.6420, mae: 2.0088, huber: 1.5749, swd: 0.4484, ept: 83.5953
+    Epoch [5/50], Val Losses: mse: 12.2423, mae: 2.6761, huber: 2.2248, swd: 1.7147, ept: 57.7807
+    Epoch [5/50], Test Losses: mse: 12.7759, mae: 2.6918, huber: 2.2421, swd: 1.5467, ept: 60.8058
+      Epoch 5 composite train-obj: 1.799110
+            No improvement (3.0821), counter 1/5
+    Epoch [6/50], Train Losses: mse: 6.6884, mae: 1.8494, huber: 1.4224, swd: 0.3620, ept: 96.5542
+    Epoch [6/50], Val Losses: mse: 12.6074, mae: 2.7274, huber: 2.2741, swd: 1.7824, ept: 57.3211
+    Epoch [6/50], Test Losses: mse: 12.6659, mae: 2.6718, huber: 2.2229, swd: 1.6006, ept: 64.5439
+      Epoch 6 composite train-obj: 1.603382
+            No improvement (3.1653), counter 2/5
+    Epoch [7/50], Train Losses: mse: 5.8346, mae: 1.7033, huber: 1.2828, swd: 0.3008, ept: 109.2579
+    Epoch [7/50], Val Losses: mse: 12.3330, mae: 2.6970, huber: 2.2437, swd: 1.7904, ept: 63.4489
+    Epoch [7/50], Test Losses: mse: 12.5202, mae: 2.6444, huber: 2.1968, swd: 1.5784, ept: 69.5194
+      Epoch 7 composite train-obj: 1.433194
+            No improvement (3.1389), counter 3/5
+    Epoch [8/50], Train Losses: mse: 5.0173, mae: 1.5611, huber: 1.1475, swd: 0.2616, ept: 122.3468
+    Epoch [8/50], Val Losses: mse: 12.8424, mae: 2.7450, huber: 2.2916, swd: 1.7719, ept: 63.6935
+    Epoch [8/50], Test Losses: mse: 12.2135, mae: 2.6042, huber: 2.1575, swd: 1.6389, ept: 72.6563
+      Epoch 8 composite train-obj: 1.278298
+            No improvement (3.1775), counter 4/5
+    Epoch [9/50], Train Losses: mse: 4.3135, mae: 1.4347, huber: 1.0275, swd: 0.2350, ept: 134.8371
+    Epoch [9/50], Val Losses: mse: 13.3084, mae: 2.7991, huber: 2.3453, swd: 1.8120, ept: 63.7465
+    Epoch [9/50], Test Losses: mse: 12.3943, mae: 2.6200, huber: 2.1733, swd: 1.6745, ept: 75.0544
+      Epoch 9 composite train-obj: 1.144992
+    Epoch [9/50], Test Losses: mse: 12.6597, mae: 2.6909, huber: 2.2400, swd: 1.4506, ept: 58.4312
+    Best round's Test MSE: 12.6597, MAE: 2.6909, SWD: 1.4506
+    Best round's Validation MSE: 12.0402, MAE: 2.6608, SWD: 1.6990
+    Best round's Test verification MSE : 12.6597, MAE: 2.6909, SWD: 1.4506
+    Time taken: 47.64 seconds
+    
+    ==================================================
+     Running experiment with seed 7 (2/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 14.4540, mae: 2.9657, huber: 2.5042, swd: 1.5707, ept: 26.8523
+    Epoch [1/50], Val Losses: mse: 12.6323, mae: 2.7456, huber: 2.2899, swd: 1.9768, ept: 47.7260
+    Epoch [1/50], Test Losses: mse: 13.7316, mae: 2.8690, huber: 2.4108, swd: 1.6713, ept: 43.9959
+      Epoch 1 composite train-obj: 3.289513
+            Val objective improved inf → 3.2783, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 10.8161, mae: 2.4964, huber: 2.0455, swd: 0.9041, ept: 52.3479
+    Epoch [2/50], Val Losses: mse: 12.0676, mae: 2.6694, huber: 2.2151, swd: 1.7664, ept: 53.0362
+    Epoch [2/50], Test Losses: mse: 13.2407, mae: 2.7947, huber: 2.3389, swd: 1.5240, ept: 51.1351
+      Epoch 2 composite train-obj: 2.497564
+            Val objective improved 3.2783 → 3.0983, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 9.1623, mae: 2.2529, huber: 1.8096, swd: 0.6300, ept: 68.6271
+    Epoch [3/50], Val Losses: mse: 11.5793, mae: 2.5994, huber: 2.1475, swd: 1.7033, ept: 58.1633
+    Epoch [3/50], Test Losses: mse: 12.8415, mae: 2.7295, huber: 2.2762, swd: 1.5099, ept: 59.4215
+      Epoch 3 composite train-obj: 2.124584
+            Val objective improved 3.0983 → 2.9992, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 7.8248, mae: 2.0405, huber: 1.6051, swd: 0.4672, ept: 85.4159
+    Epoch [4/50], Val Losses: mse: 11.5283, mae: 2.6074, huber: 2.1546, swd: 1.6745, ept: 61.1466
+    Epoch [4/50], Test Losses: mse: 12.3310, mae: 2.6566, huber: 2.2059, swd: 1.5026, ept: 64.6566
+      Epoch 4 composite train-obj: 1.838688
+            Val objective improved 2.9992 → 2.9919, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 6.6026, mae: 1.8369, huber: 1.4100, swd: 0.3580, ept: 102.1984
+    Epoch [5/50], Val Losses: mse: 11.9402, mae: 2.6437, huber: 2.1921, swd: 1.6789, ept: 63.1909
+    Epoch [5/50], Test Losses: mse: 12.3094, mae: 2.6298, huber: 2.1814, swd: 1.6302, ept: 69.5154
+      Epoch 5 composite train-obj: 1.589011
+            No improvement (3.0316), counter 1/5
+    Epoch [6/50], Train Losses: mse: 5.5167, mae: 1.6539, huber: 1.2350, swd: 0.2916, ept: 117.3446
+    Epoch [6/50], Val Losses: mse: 12.4728, mae: 2.6926, huber: 2.2409, swd: 1.7106, ept: 64.2629
+    Epoch [6/50], Test Losses: mse: 12.6860, mae: 2.6614, huber: 2.2131, swd: 1.6690, ept: 72.2062
+      Epoch 6 composite train-obj: 1.380817
+            No improvement (3.0962), counter 2/5
+    Epoch [7/50], Train Losses: mse: 4.5663, mae: 1.4891, huber: 1.0783, swd: 0.2543, ept: 131.1210
+    Epoch [7/50], Val Losses: mse: 12.7928, mae: 2.7312, huber: 2.2781, swd: 1.6952, ept: 65.9954
+    Epoch [7/50], Test Losses: mse: 12.5521, mae: 2.6410, huber: 2.1936, swd: 1.6575, ept: 74.9560
+      Epoch 7 composite train-obj: 1.205511
+            No improvement (3.1257), counter 3/5
+    Epoch [8/50], Train Losses: mse: 3.7980, mae: 1.3522, huber: 0.9487, swd: 0.2281, ept: 143.1071
+    Epoch [8/50], Val Losses: mse: 13.3377, mae: 2.7926, huber: 2.3376, swd: 1.8043, ept: 65.0266
+    Epoch [8/50], Test Losses: mse: 12.9333, mae: 2.6795, huber: 2.2315, swd: 1.7163, ept: 75.2441
+      Epoch 8 composite train-obj: 1.062702
+            No improvement (3.2398), counter 4/5
+    Epoch [9/50], Train Losses: mse: 3.1253, mae: 1.2239, huber: 0.8284, swd: 0.2008, ept: 153.6680
+    Epoch [9/50], Val Losses: mse: 13.6330, mae: 2.8106, huber: 2.3565, swd: 1.7863, ept: 66.0620
+    Epoch [9/50], Test Losses: mse: 13.1153, mae: 2.6877, huber: 2.2402, swd: 1.7509, ept: 77.4433
+      Epoch 9 composite train-obj: 0.928824
+    Epoch [9/50], Test Losses: mse: 12.3310, mae: 2.6566, huber: 2.2059, swd: 1.5026, ept: 64.6566
+    Best round's Test MSE: 12.3310, MAE: 2.6566, SWD: 1.5026
+    Best round's Validation MSE: 11.5283, MAE: 2.6074, SWD: 1.6745
+    Best round's Test verification MSE : 12.3310, MAE: 2.6566, SWD: 1.5026
+    Time taken: 46.03 seconds
+    
+    ==================================================
+     Running experiment with seed 20 (3/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 15.9807, mae: 3.1641, huber: 2.6986, swd: 1.7073, ept: 16.6077
+    Epoch [1/50], Val Losses: mse: 12.8945, mae: 2.7921, huber: 2.3343, swd: 1.9267, ept: 41.5525
+    Epoch [1/50], Test Losses: mse: 14.1018, mae: 2.9143, huber: 2.4553, swd: 1.5274, ept: 41.0923
+      Epoch 1 composite train-obj: 3.552271
+            Val objective improved inf → 3.2976, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 11.5792, mae: 2.6099, huber: 2.1558, swd: 0.9896, ept: 44.8066
+    Epoch [2/50], Val Losses: mse: 12.1787, mae: 2.6808, huber: 2.2271, swd: 1.6128, ept: 53.2846
+    Epoch [2/50], Test Losses: mse: 13.3375, mae: 2.8092, huber: 2.3536, swd: 1.4114, ept: 48.9593
+      Epoch 2 composite train-obj: 2.650567
+            Val objective improved 3.2976 → 3.0335, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 10.2768, mae: 2.4175, huber: 1.9695, swd: 0.7718, ept: 57.6854
+    Epoch [3/50], Val Losses: mse: 12.2358, mae: 2.6582, huber: 2.2071, swd: 1.5770, ept: 57.5598
+    Epoch [3/50], Test Losses: mse: 13.2626, mae: 2.7842, huber: 2.3303, swd: 1.3724, ept: 54.3661
+      Epoch 3 composite train-obj: 2.355395
+            Val objective improved 3.0335 → 2.9956, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 9.2599, mae: 2.2628, huber: 1.8200, swd: 0.6232, ept: 67.3436
+    Epoch [4/50], Val Losses: mse: 11.9047, mae: 2.6243, huber: 2.1738, swd: 1.5433, ept: 57.7635
+    Epoch [4/50], Test Losses: mse: 12.8141, mae: 2.7140, huber: 2.2628, swd: 1.3584, ept: 59.2239
+      Epoch 4 composite train-obj: 2.131557
+            Val objective improved 2.9956 → 2.9454, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 8.2797, mae: 2.1088, huber: 1.6715, swd: 0.5012, ept: 77.9457
+    Epoch [5/50], Val Losses: mse: 12.0499, mae: 2.6297, huber: 2.1807, swd: 1.5451, ept: 59.6446
+    Epoch [5/50], Test Losses: mse: 12.7870, mae: 2.6953, huber: 2.2456, swd: 1.3875, ept: 62.7805
+      Epoch 5 composite train-obj: 1.922157
+            No improvement (2.9533), counter 1/5
+    Epoch [6/50], Train Losses: mse: 7.4419, mae: 1.9724, huber: 1.5407, swd: 0.4225, ept: 88.4171
+    Epoch [6/50], Val Losses: mse: 11.8086, mae: 2.5968, huber: 2.1489, swd: 1.5575, ept: 61.5380
+    Epoch [6/50], Test Losses: mse: 12.4269, mae: 2.6491, huber: 2.2011, swd: 1.4306, ept: 65.0737
+      Epoch 6 composite train-obj: 1.751981
+            Val objective improved 2.9454 → 2.9277, saving checkpoint.
+    Epoch [7/50], Train Losses: mse: 6.6315, mae: 1.8376, huber: 1.4116, swd: 0.3558, ept: 98.6483
+    Epoch [7/50], Val Losses: mse: 11.9723, mae: 2.6311, huber: 2.1813, swd: 1.5103, ept: 61.7523
+    Epoch [7/50], Test Losses: mse: 12.3582, mae: 2.6277, huber: 2.1802, swd: 1.3909, ept: 67.5506
+      Epoch 7 composite train-obj: 1.589542
+            No improvement (2.9364), counter 1/5
+    Epoch [8/50], Train Losses: mse: 5.8628, mae: 1.7072, huber: 1.2871, swd: 0.3043, ept: 109.0561
+    Epoch [8/50], Val Losses: mse: 12.2493, mae: 2.6547, huber: 2.2050, swd: 1.5339, ept: 62.5882
+    Epoch [8/50], Test Losses: mse: 12.6498, mae: 2.6456, huber: 2.1991, swd: 1.4058, ept: 69.8533
+      Epoch 8 composite train-obj: 1.439227
+            No improvement (2.9719), counter 2/5
+    Epoch [9/50], Train Losses: mse: 5.1399, mae: 1.5820, huber: 1.1677, swd: 0.2713, ept: 119.7758
+    Epoch [9/50], Val Losses: mse: 12.8316, mae: 2.7149, huber: 2.2654, swd: 1.5310, ept: 63.2746
+    Epoch [9/50], Test Losses: mse: 12.4843, mae: 2.6219, huber: 2.1767, swd: 1.4210, ept: 71.6442
+      Epoch 9 composite train-obj: 1.303354
+            No improvement (3.0309), counter 3/5
+    Epoch [10/50], Train Losses: mse: 4.4525, mae: 1.4631, huber: 1.0546, swd: 0.2431, ept: 130.4172
+    Epoch [10/50], Val Losses: mse: 12.9347, mae: 2.7308, huber: 2.2794, swd: 1.5014, ept: 64.8237
+    Epoch [10/50], Test Losses: mse: 12.6024, mae: 2.6334, huber: 2.1865, swd: 1.4834, ept: 74.4504
+      Epoch 10 composite train-obj: 1.176174
+            No improvement (3.0301), counter 4/5
+    Epoch [11/50], Train Losses: mse: 3.8389, mae: 1.3509, huber: 0.9485, swd: 0.2226, ept: 141.0663
+    Epoch [11/50], Val Losses: mse: 13.2999, mae: 2.7697, huber: 2.3184, swd: 1.5358, ept: 65.5327
+    Epoch [11/50], Test Losses: mse: 12.5594, mae: 2.6286, huber: 2.1830, swd: 1.5030, ept: 76.4364
+      Epoch 11 composite train-obj: 1.059822
+    Epoch [11/50], Test Losses: mse: 12.4269, mae: 2.6491, huber: 2.2011, swd: 1.4306, ept: 65.0737
+    Best round's Test MSE: 12.4269, MAE: 2.6491, SWD: 1.4306
+    Best round's Validation MSE: 11.8086, MAE: 2.5968, SWD: 1.5575
+    Best round's Test verification MSE : 12.4269, MAE: 2.6491, SWD: 1.4306
+    Time taken: 55.65 seconds
+    
+    ==================================================
+    Experiment Summary (TimeMixer_lorenz96_seq336_pred196_20250513_0005)
+    ==================================================
+    Number of runs: 3
+    Seeds: [1955, 7, 20]
+    
+    Test Performance at Best Validation (mean ± std):
+      mse: 12.4726 ± 0.1380
+      mae: 2.6655 ± 0.0182
+      huber: 2.2156 ± 0.0173
+      swd: 1.4613 ± 0.0304
+      ept: 62.7205 ± 3.0378
+      count: 11.0000 ± 0.0000
+    
+    Corresponding Validation Performance (mean ± std):
+      mse: 11.7924 ± 0.2093
+      mae: 2.6217 ± 0.0280
+      huber: 2.1709 ± 0.0271
+      swd: 1.6437 ± 0.0618
+      ept: 59.3626 ± 2.8043
+      count: 11.0000 ± 0.0000
+    ==================================================
+    Three seeds Time taken: 149.42 seconds
+    
+    Experiment complete: TimeMixer_lorenz96_seq336_pred196_20250513_0005
+    Model: TimeMixer
+    Dataset: lorenz96
+    Sequence Length: 336
+    Prediction Length: 196
+    Seeds: [1955, 7, 20]
+    
+
+#### pred=336
+
+##### huber
+
+
+```python
+utils.reload_modules([utils])
+cfg = train_config.FlatTimeMixerConfig(
+    seq_len=336,
+    pred_len=336,
+    channels=data_mgr.datasets['lorenz96']['channels'],
+    enc_in=data_mgr.datasets['lorenz96']['channels'],
+    dec_in=data_mgr.datasets['lorenz96']['channels'],
+    c_out=data_mgr.datasets['lorenz96']['channels'],
+    batch_size=128,
+    learning_rate=9e-4,
+    seeds=[1955, 7, 20],
+    epochs=50, 
+)
+exp = execute_model_evaluation('lorenz96', cfg, data_mgr, scale=False)
+
+```
+
+    Reloading modules...
+      Reloaded: utils
+    Module reload complete.
+    Shape of training data: torch.Size([13300, 6])
+    Shape of validation data: torch.Size([1900, 6])
+    Shape of testing data: torch.Size([3800, 6])
+    global_std.shape: torch.Size([6])
+    Global Std for lorenz96: tensor([3.6750, 3.6678, 3.7240, 3.7347, 3.8038, 3.5588], device='cuda:0')
+    Train set sample shapes: torch.Size([336, 6]), torch.Size([336, 6])
+    Validation set sample shapes: torch.Size([336, 6]), torch.Size([336, 6])
+    Test set data shapes: torch.Size([3800, 6]), torch.Size([3800, 6])
+    Number of batches in train_loader: 99
+    Batch 0: Data shape torch.Size([128, 336, 6]), Target shape torch.Size([128, 336, 6])
+    
+    ==================================================
+    Data Preparation: lorenz96
+    ==================================================
+    Sequence Length: 336
+    Prediction Length: 336
+    Batch Size: 128
+    Scaling: No
+    Train Split: 0.7
+    Val Split: 0.8
+    Training Batches: 99
+    Validation Batches: 10
+    Test Batches: 25
+    ==================================================
+    
+    ==================================================
+     Running experiment with seed 1955 (1/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 13.7408, mae: 2.9495, huber: 2.4863, swd: 3.3826, ept: 40.2960
+    Epoch [1/50], Val Losses: mse: 13.8006, mae: 2.9458, huber: 2.4853, swd: 3.9295, ept: 62.5268
+    Epoch [1/50], Test Losses: mse: 13.9859, mae: 2.9483, huber: 2.4881, swd: 3.0245, ept: 61.2322
+      Epoch 1 composite train-obj: 2.486267
+            Val objective improved inf → 2.4853, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 10.7076, mae: 2.5454, huber: 2.0918, swd: 2.2907, ept: 74.1849
+    Epoch [2/50], Val Losses: mse: 13.4010, mae: 2.8857, huber: 2.4269, swd: 3.7010, ept: 62.6949
+    Epoch [2/50], Test Losses: mse: 13.7680, mae: 2.9143, huber: 2.4556, swd: 2.9645, ept: 65.5998
+      Epoch 2 composite train-obj: 2.091840
+            Val objective improved 2.4853 → 2.4269, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 9.4901, mae: 2.3522, huber: 1.9050, swd: 1.8428, ept: 90.8790
+    Epoch [3/50], Val Losses: mse: 13.6510, mae: 2.9173, huber: 2.4570, swd: 2.6336, ept: 62.2516
+    Epoch [3/50], Test Losses: mse: 14.1610, mae: 2.9217, huber: 2.4640, swd: 2.0404, ept: 68.7315
+      Epoch 3 composite train-obj: 1.905024
+            No improvement (2.4570), counter 1/5
+    Epoch [4/50], Train Losses: mse: 8.4039, mae: 2.1763, huber: 1.7353, swd: 1.4975, ept: 106.1947
+    Epoch [4/50], Val Losses: mse: 13.3737, mae: 2.8865, huber: 2.4269, swd: 2.5864, ept: 64.2656
+    Epoch [4/50], Test Losses: mse: 14.0565, mae: 2.8991, huber: 2.4425, swd: 2.2287, ept: 73.6290
+      Epoch 4 composite train-obj: 1.735288
+            No improvement (2.4269), counter 2/5
+    Epoch [5/50], Train Losses: mse: 7.2775, mae: 1.9927, huber: 1.5584, swd: 1.2042, ept: 123.2373
+    Epoch [5/50], Val Losses: mse: 13.8360, mae: 2.9326, huber: 2.4723, swd: 2.2970, ept: 61.6746
+    Epoch [5/50], Test Losses: mse: 14.7561, mae: 2.9574, huber: 2.5004, swd: 2.0475, ept: 75.5355
+      Epoch 5 composite train-obj: 1.558406
+            No improvement (2.4723), counter 3/5
+    Epoch [6/50], Train Losses: mse: 6.1050, mae: 1.7996, huber: 1.3724, swd: 0.9536, ept: 144.1310
+    Epoch [6/50], Val Losses: mse: 14.6467, mae: 3.0153, huber: 2.5545, swd: 2.2149, ept: 62.4582
+    Epoch [6/50], Test Losses: mse: 15.0551, mae: 2.9742, huber: 2.5181, swd: 2.0409, ept: 77.7165
+      Epoch 6 composite train-obj: 1.372378
+            No improvement (2.5545), counter 4/5
+    Epoch [7/50], Train Losses: mse: 5.0209, mae: 1.6142, huber: 1.1946, swd: 0.7610, ept: 170.1537
+    Epoch [7/50], Val Losses: mse: 15.3319, mae: 3.0805, huber: 2.6184, swd: 2.1534, ept: 62.8185
+    Epoch [7/50], Test Losses: mse: 15.4245, mae: 3.0041, huber: 2.5478, swd: 1.9264, ept: 82.2296
+      Epoch 7 composite train-obj: 1.194599
+    Epoch [7/50], Test Losses: mse: 13.7680, mae: 2.9143, huber: 2.4556, swd: 2.9645, ept: 65.5998
+    Best round's Test MSE: 13.7680, MAE: 2.9143, SWD: 2.9645
+    Best round's Validation MSE: 13.4010, MAE: 2.8857, SWD: 3.7010
+    Best round's Test verification MSE : 13.7680, MAE: 2.9143, SWD: 2.9645
+    Time taken: 39.26 seconds
+    
+    ==================================================
+     Running experiment with seed 7 (2/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 14.2242, mae: 2.9926, huber: 2.5287, swd: 3.1566, ept: 35.7743
+    Epoch [1/50], Val Losses: mse: 13.8031, mae: 2.9449, huber: 2.4846, swd: 3.8675, ept: 62.6673
+    Epoch [1/50], Test Losses: mse: 13.7967, mae: 2.9318, huber: 2.4713, swd: 2.8535, ept: 58.5231
+      Epoch 1 composite train-obj: 2.528727
+            Val objective improved inf → 2.4846, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 10.8815, mae: 2.5736, huber: 2.1188, swd: 2.3266, ept: 71.3956
+    Epoch [2/50], Val Losses: mse: 13.2555, mae: 2.8576, huber: 2.3996, swd: 2.9351, ept: 66.0796
+    Epoch [2/50], Test Losses: mse: 13.8796, mae: 2.9133, huber: 2.4546, swd: 2.2295, ept: 67.1024
+      Epoch 2 composite train-obj: 2.118848
+            Val objective improved 2.4846 → 2.3996, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 9.6258, mae: 2.3784, huber: 1.9299, swd: 1.8515, ept: 88.6033
+    Epoch [3/50], Val Losses: mse: 13.4491, mae: 2.8709, huber: 2.4131, swd: 2.9446, ept: 64.4639
+    Epoch [3/50], Test Losses: mse: 13.7918, mae: 2.8863, huber: 2.4295, swd: 2.2347, ept: 71.5396
+      Epoch 3 composite train-obj: 1.929867
+            No improvement (2.4131), counter 1/5
+    Epoch [4/50], Train Losses: mse: 8.5745, mae: 2.2075, huber: 1.7652, swd: 1.5376, ept: 104.2068
+    Epoch [4/50], Val Losses: mse: 13.7540, mae: 2.9077, huber: 2.4498, swd: 2.5891, ept: 63.1333
+    Epoch [4/50], Test Losses: mse: 13.9998, mae: 2.8923, huber: 2.4363, swd: 1.8328, ept: 73.8349
+      Epoch 4 composite train-obj: 1.765162
+            No improvement (2.4498), counter 2/5
+    Epoch [5/50], Train Losses: mse: 7.6133, mae: 2.0498, huber: 1.6133, swd: 1.2857, ept: 118.3716
+    Epoch [5/50], Val Losses: mse: 13.7245, mae: 2.9053, huber: 2.4464, swd: 2.7666, ept: 62.7921
+    Epoch [5/50], Test Losses: mse: 13.9925, mae: 2.8797, huber: 2.4244, swd: 2.1758, ept: 75.8028
+      Epoch 5 composite train-obj: 1.613304
+            No improvement (2.4464), counter 3/5
+    Epoch [6/50], Train Losses: mse: 6.7106, mae: 1.9019, huber: 1.4708, swd: 1.0898, ept: 133.0287
+    Epoch [6/50], Val Losses: mse: 14.2407, mae: 2.9481, huber: 2.4892, swd: 2.4306, ept: 62.5686
+    Epoch [6/50], Test Losses: mse: 14.6613, mae: 2.9316, huber: 2.4764, swd: 1.9465, ept: 76.4951
+      Epoch 6 composite train-obj: 1.470849
+            No improvement (2.4892), counter 4/5
+    Epoch [7/50], Train Losses: mse: 5.8359, mae: 1.7543, huber: 1.3291, swd: 0.9051, ept: 150.4469
+    Epoch [7/50], Val Losses: mse: 14.2982, mae: 2.9531, huber: 2.4938, swd: 2.4764, ept: 63.4331
+    Epoch [7/50], Test Losses: mse: 15.0459, mae: 2.9689, huber: 2.5126, swd: 2.0373, ept: 77.6171
+      Epoch 7 composite train-obj: 1.329132
+    Epoch [7/50], Test Losses: mse: 13.8796, mae: 2.9133, huber: 2.4546, swd: 2.2295, ept: 67.1024
+    Best round's Test MSE: 13.8796, MAE: 2.9133, SWD: 2.2295
+    Best round's Validation MSE: 13.2555, MAE: 2.8576, SWD: 2.9351
+    Best round's Test verification MSE : 13.8796, MAE: 2.9133, SWD: 2.2295
+    Time taken: 39.74 seconds
+    
+    ==================================================
+     Running experiment with seed 20 (3/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 13.4891, mae: 2.9277, huber: 2.4644, swd: 3.2242, ept: 40.9735
+    Epoch [1/50], Val Losses: mse: 13.5094, mae: 2.9141, huber: 2.4531, swd: 3.6700, ept: 62.9620
+    Epoch [1/50], Test Losses: mse: 14.0963, mae: 2.9637, huber: 2.5028, swd: 2.7854, ept: 60.8266
+      Epoch 1 composite train-obj: 2.464412
+            Val objective improved inf → 2.4531, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 10.5779, mae: 2.5281, huber: 2.0747, swd: 2.2588, ept: 74.9219
+    Epoch [2/50], Val Losses: mse: 13.6473, mae: 2.9030, huber: 2.4436, swd: 2.9537, ept: 61.0213
+    Epoch [2/50], Test Losses: mse: 14.2284, mae: 2.9525, huber: 2.4934, swd: 2.0782, ept: 65.7720
+      Epoch 2 composite train-obj: 2.074683
+            Val objective improved 2.4531 → 2.4436, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 9.3604, mae: 2.3324, huber: 1.8860, swd: 1.8241, ept: 91.8464
+    Epoch [3/50], Val Losses: mse: 14.1416, mae: 2.9536, huber: 2.4943, swd: 2.8092, ept: 60.0859
+    Epoch [3/50], Test Losses: mse: 14.0333, mae: 2.9107, huber: 2.4536, swd: 2.0643, ept: 70.4159
+      Epoch 3 composite train-obj: 1.885960
+            No improvement (2.4943), counter 1/5
+    Epoch [4/50], Train Losses: mse: 8.2923, mae: 2.1564, huber: 1.7164, swd: 1.5124, ept: 108.9517
+    Epoch [4/50], Val Losses: mse: 13.8995, mae: 2.9164, huber: 2.4582, swd: 2.5783, ept: 63.1203
+    Epoch [4/50], Test Losses: mse: 14.0357, mae: 2.8956, huber: 2.4398, swd: 1.9826, ept: 72.0123
+      Epoch 4 composite train-obj: 1.716424
+            No improvement (2.4582), counter 2/5
+    Epoch [5/50], Train Losses: mse: 7.2516, mae: 1.9862, huber: 1.5526, swd: 1.2628, ept: 125.5033
+    Epoch [5/50], Val Losses: mse: 14.1458, mae: 2.9341, huber: 2.4759, swd: 2.5528, ept: 63.1449
+    Epoch [5/50], Test Losses: mse: 14.2029, mae: 2.9027, huber: 2.4472, swd: 1.9767, ept: 75.9347
+      Epoch 5 composite train-obj: 1.552647
+            No improvement (2.4759), counter 3/5
+    Epoch [6/50], Train Losses: mse: 6.2569, mae: 1.8223, huber: 1.3950, swd: 1.0436, ept: 144.5322
+    Epoch [6/50], Val Losses: mse: 15.1592, mae: 3.0344, huber: 2.5745, swd: 2.5290, ept: 62.4252
+    Epoch [6/50], Test Losses: mse: 14.7095, mae: 2.9483, huber: 2.4923, swd: 1.7954, ept: 79.2924
+      Epoch 6 composite train-obj: 1.395032
+            No improvement (2.5745), counter 4/5
+    Epoch [7/50], Train Losses: mse: 5.2893, mae: 1.6589, huber: 1.2379, swd: 0.8499, ept: 166.3361
+    Epoch [7/50], Val Losses: mse: 15.9197, mae: 3.1135, huber: 2.6523, swd: 2.3246, ept: 63.2308
+    Epoch [7/50], Test Losses: mse: 15.3682, mae: 3.0075, huber: 2.5508, swd: 1.6933, ept: 80.5094
+      Epoch 7 composite train-obj: 1.237942
+    Epoch [7/50], Test Losses: mse: 14.2284, mae: 2.9525, huber: 2.4934, swd: 2.0782, ept: 65.7720
+    Best round's Test MSE: 14.2284, MAE: 2.9525, SWD: 2.0782
+    Best round's Validation MSE: 13.6473, MAE: 2.9030, SWD: 2.9537
+    Best round's Test verification MSE : 14.2284, MAE: 2.9525, SWD: 2.0782
+    Time taken: 40.00 seconds
+    
+    ==================================================
+    Experiment Summary (TimeMixer_lorenz96_seq336_pred336_20250512_2227)
+    ==================================================
+    Number of runs: 3
+    Seeds: [1955, 7, 20]
+    
+    Test Performance at Best Validation (mean ± std):
+      mse: 13.9587 ± 0.1961
+      mae: 2.9267 ± 0.0182
+      huber: 2.4679 ± 0.0180
+      swd: 2.4241 ± 0.3871
+      ept: 66.1581 ± 0.6715
+      count: 10.0000 ± 0.0000
+    
+    Corresponding Validation Performance (mean ± std):
+      mse: 13.4346 ± 0.1617
+      mae: 2.8821 ± 0.0187
+      huber: 2.4234 ± 0.0182
+      swd: 3.1966 ± 0.3567
+      ept: 63.2653 ± 2.1040
+      count: 10.0000 ± 0.0000
+    ==================================================
+    Three seeds Time taken: 119.07 seconds
+    
+    Experiment complete: TimeMixer_lorenz96_seq336_pred336_20250512_2227
+    Model: TimeMixer
+    Dataset: lorenz96
+    Sequence Length: 336
+    Prediction Length: 336
+    Seeds: [1955, 7, 20]
+    
+
+##### huber + 0.5
+
+
+```python
+utils.reload_modules([utils])
+cfg = train_config.FlatTimeMixerConfig(
+    seq_len=336,
+    pred_len=336,
+    channels=data_mgr.datasets['lorenz96']['channels'],
+    enc_in=data_mgr.datasets['lorenz96']['channels'],
+    dec_in=data_mgr.datasets['lorenz96']['channels'],
+    c_out=data_mgr.datasets['lorenz96']['channels'],
+    batch_size=128,
+    learning_rate=9e-4,
+    seeds=[1955, 7, 20],
+    epochs=50, 
+    loss_backward_weights = [0.0, 0.0, 1.0, 0.5, 0.0],
+    loss_validate_weights = [0.0, 0.0, 1.0, 0.5, 0.0],
+)
+exp = execute_model_evaluation('lorenz96', cfg, data_mgr, scale=False)
+
+```
+
+    Reloading modules...
+      Reloaded: utils
+    Module reload complete.
+    Shape of training data: torch.Size([13300, 6])
+    Shape of validation data: torch.Size([1900, 6])
+    Shape of testing data: torch.Size([3800, 6])
+    global_std.shape: torch.Size([6])
+    Global Std for lorenz96: tensor([3.6750, 3.6678, 3.7240, 3.7347, 3.8038, 3.5588], device='cuda:0')
+    Train set sample shapes: torch.Size([336, 6]), torch.Size([336, 6])
+    Validation set sample shapes: torch.Size([336, 6]), torch.Size([336, 6])
+    Test set data shapes: torch.Size([3800, 6]), torch.Size([3800, 6])
+    Number of batches in train_loader: 99
+    Batch 0: Data shape torch.Size([128, 336, 6]), Target shape torch.Size([128, 336, 6])
+    
+    ==================================================
+    Data Preparation: lorenz96
+    ==================================================
+    Sequence Length: 336
+    Prediction Length: 336
+    Batch Size: 128
+    Scaling: No
+    Train Split: 0.7
+    Val Split: 0.8
+    Training Batches: 99
+    Validation Batches: 10
+    Test Batches: 25
+    ==================================================
+    
+    ==================================================
+     Running experiment with seed 1955 (1/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 17.4111, mae: 3.3055, huber: 2.8382, swd: 1.2400, ept: 17.5792
+    Epoch [1/50], Val Losses: mse: 15.4685, mae: 3.1361, huber: 2.6711, swd: 2.2844, ept: 36.7414
+    Epoch [1/50], Test Losses: mse: 16.0392, mae: 3.1610, huber: 2.6968, swd: 1.5473, ept: 36.8822
+      Epoch 1 composite train-obj: 3.458248
+            Val objective improved inf → 3.8133, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 12.7919, mae: 2.7913, huber: 2.3325, swd: 0.8548, ept: 43.1088
+    Epoch [2/50], Val Losses: mse: 14.4665, mae: 3.0134, huber: 2.5514, swd: 2.0605, ept: 45.4326
+    Epoch [2/50], Test Losses: mse: 15.1287, mae: 3.0600, huber: 2.5978, swd: 1.4052, ept: 44.7729
+      Epoch 2 composite train-obj: 2.759893
+            Val objective improved 3.8133 → 3.5816, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 11.4189, mae: 2.6019, huber: 2.1477, swd: 0.6379, ept: 55.3767
+    Epoch [3/50], Val Losses: mse: 14.3659, mae: 2.9871, huber: 2.5263, swd: 1.8516, ept: 47.0419
+    Epoch [3/50], Test Losses: mse: 15.3082, mae: 3.0545, huber: 2.5936, swd: 1.3279, ept: 49.3911
+      Epoch 3 composite train-obj: 2.466689
+            Val objective improved 3.5816 → 3.4522, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 10.4331, mae: 2.4571, huber: 2.0072, swd: 0.4946, ept: 65.4097
+    Epoch [4/50], Val Losses: mse: 14.1070, mae: 2.9614, huber: 2.5007, swd: 1.8189, ept: 48.2301
+    Epoch [4/50], Test Losses: mse: 15.1947, mae: 3.0348, huber: 2.5747, swd: 1.3105, ept: 52.0729
+      Epoch 4 composite train-obj: 2.254521
+            Val objective improved 3.4522 → 3.4102, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 9.5437, mae: 2.3215, huber: 1.8759, swd: 0.3869, ept: 76.3171
+    Epoch [5/50], Val Losses: mse: 13.8849, mae: 2.9282, huber: 2.4685, swd: 1.7150, ept: 49.8037
+    Epoch [5/50], Test Losses: mse: 15.2768, mae: 3.0296, huber: 2.5708, swd: 1.3613, ept: 56.0971
+      Epoch 5 composite train-obj: 2.069336
+            Val objective improved 3.4102 → 3.3260, saving checkpoint.
+    Epoch [6/50], Train Losses: mse: 8.6625, mae: 2.1855, huber: 1.7443, swd: 0.3109, ept: 87.8855
+    Epoch [6/50], Val Losses: mse: 14.4880, mae: 2.9965, huber: 2.5353, swd: 1.8013, ept: 50.3089
+    Epoch [6/50], Test Losses: mse: 15.5054, mae: 3.0406, huber: 2.5816, swd: 1.3911, ept: 57.6080
+      Epoch 6 composite train-obj: 1.899770
+            No improvement (3.4360), counter 1/5
+    Epoch [7/50], Train Losses: mse: 7.7432, mae: 2.0421, huber: 1.6059, swd: 0.2630, ept: 100.6171
+    Epoch [7/50], Val Losses: mse: 14.4942, mae: 2.9963, huber: 2.5353, swd: 1.8245, ept: 53.3745
+    Epoch [7/50], Test Losses: mse: 15.3284, mae: 3.0208, huber: 2.5625, swd: 1.4844, ept: 61.8637
+      Epoch 7 composite train-obj: 1.737417
+            No improvement (3.4475), counter 2/5
+    Epoch [8/50], Train Losses: mse: 6.7855, mae: 1.8925, huber: 1.4615, swd: 0.2364, ept: 115.3597
+    Epoch [8/50], Val Losses: mse: 14.8915, mae: 3.0329, huber: 2.5719, swd: 1.8263, ept: 54.5626
+    Epoch [8/50], Test Losses: mse: 15.3976, mae: 3.0238, huber: 2.5658, swd: 1.5432, ept: 64.8008
+      Epoch 8 composite train-obj: 1.579651
+            No improvement (3.4850), counter 3/5
+    Epoch [9/50], Train Losses: mse: 5.8235, mae: 1.7361, huber: 1.3110, swd: 0.2139, ept: 133.8404
+    Epoch [9/50], Val Losses: mse: 15.3744, mae: 3.0720, huber: 2.6105, swd: 1.8708, ept: 56.4038
+    Epoch [9/50], Test Losses: mse: 16.0850, mae: 3.0913, huber: 2.6323, swd: 1.5190, ept: 65.7822
+      Epoch 9 composite train-obj: 1.417958
+            No improvement (3.5459), counter 4/5
+    Epoch [10/50], Train Losses: mse: 4.9535, mae: 1.5909, huber: 1.1717, swd: 0.1976, ept: 155.2348
+    Epoch [10/50], Val Losses: mse: 15.6344, mae: 3.1090, huber: 2.6466, swd: 1.8354, ept: 55.5257
+    Epoch [10/50], Test Losses: mse: 16.4133, mae: 3.1190, huber: 2.6599, swd: 1.5407, ept: 67.8458
+      Epoch 10 composite train-obj: 1.270534
+    Epoch [10/50], Test Losses: mse: 15.2768, mae: 3.0296, huber: 2.5708, swd: 1.3613, ept: 56.0971
+    Best round's Test MSE: 15.2768, MAE: 3.0296, SWD: 1.3613
+    Best round's Validation MSE: 13.8849, MAE: 2.9282, SWD: 1.7150
+    Best round's Test verification MSE : 15.2768, MAE: 3.0296, SWD: 1.3613
+    Time taken: 56.84 seconds
+    
+    ==================================================
+     Running experiment with seed 7 (2/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 17.0807, mae: 3.2826, huber: 2.8152, swd: 1.4990, ept: 15.4530
+    Epoch [1/50], Val Losses: mse: 15.2660, mae: 3.1153, huber: 2.6504, swd: 2.4891, ept: 35.4845
+    Epoch [1/50], Test Losses: mse: 15.8737, mae: 3.1404, huber: 2.6762, swd: 1.5392, ept: 36.6903
+      Epoch 1 composite train-obj: 3.564734
+            Val objective improved inf → 3.8950, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 12.9634, mae: 2.8145, huber: 2.3549, swd: 0.8737, ept: 41.6053
+    Epoch [2/50], Val Losses: mse: 14.4645, mae: 3.0011, huber: 2.5388, swd: 2.1198, ept: 45.8251
+    Epoch [2/50], Test Losses: mse: 15.2556, mae: 3.0661, huber: 2.6037, swd: 1.3375, ept: 44.9066
+      Epoch 2 composite train-obj: 2.791728
+            Val objective improved 3.8950 → 3.5987, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 11.5858, mae: 2.6266, huber: 2.1718, swd: 0.6473, ept: 54.3402
+    Epoch [3/50], Val Losses: mse: 14.3948, mae: 2.9802, huber: 2.5188, swd: 2.0780, ept: 47.8377
+    Epoch [3/50], Test Losses: mse: 15.3139, mae: 3.0596, huber: 2.5982, swd: 1.3628, ept: 49.3386
+      Epoch 3 composite train-obj: 2.495467
+            Val objective improved 3.5987 → 3.5578, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 10.5561, mae: 2.4780, huber: 2.0274, swd: 0.5001, ept: 65.3068
+    Epoch [4/50], Val Losses: mse: 14.0279, mae: 2.9384, huber: 2.4784, swd: 1.9948, ept: 52.0517
+    Epoch [4/50], Test Losses: mse: 14.9846, mae: 3.0184, huber: 2.5583, swd: 1.3641, ept: 53.7100
+      Epoch 4 composite train-obj: 2.277406
+            Val objective improved 3.5578 → 3.4758, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 9.6708, mae: 2.3458, huber: 1.8991, swd: 0.3950, ept: 76.1218
+    Epoch [5/50], Val Losses: mse: 13.8730, mae: 2.9245, huber: 2.4651, swd: 2.0210, ept: 52.8525
+    Epoch [5/50], Test Losses: mse: 14.7330, mae: 2.9843, huber: 2.5253, swd: 1.4083, ept: 56.1406
+      Epoch 5 composite train-obj: 2.096639
+            Val objective improved 3.4758 → 3.4755, saving checkpoint.
+    Epoch [6/50], Train Losses: mse: 8.8827, mae: 2.2249, huber: 1.7823, swd: 0.3361, ept: 86.8362
+    Epoch [6/50], Val Losses: mse: 14.2415, mae: 2.9552, huber: 2.4955, swd: 2.0965, ept: 54.8645
+    Epoch [6/50], Test Losses: mse: 14.9130, mae: 2.9901, huber: 2.5317, swd: 1.4194, ept: 59.0757
+      Epoch 6 composite train-obj: 1.950335
+            No improvement (3.5438), counter 1/5
+    Epoch [7/50], Train Losses: mse: 8.0980, mae: 2.1030, huber: 1.6644, swd: 0.2884, ept: 97.0036
+    Epoch [7/50], Val Losses: mse: 14.5490, mae: 2.9899, huber: 2.5294, swd: 2.1797, ept: 53.9353
+    Epoch [7/50], Test Losses: mse: 15.0497, mae: 2.9966, huber: 2.5382, swd: 1.5080, ept: 61.5679
+      Epoch 7 composite train-obj: 1.808581
+            No improvement (3.6193), counter 2/5
+    Epoch [8/50], Train Losses: mse: 7.2997, mae: 1.9777, huber: 1.5435, swd: 0.2553, ept: 108.0667
+    Epoch [8/50], Val Losses: mse: 14.6525, mae: 3.0007, huber: 2.5405, swd: 2.1198, ept: 55.9908
+    Epoch [8/50], Test Losses: mse: 15.1471, mae: 2.9979, huber: 2.5401, swd: 1.5180, ept: 64.0967
+      Epoch 8 composite train-obj: 1.671188
+            No improvement (3.6004), counter 3/5
+    Epoch [9/50], Train Losses: mse: 6.5585, mae: 1.8585, huber: 1.4286, swd: 0.2312, ept: 120.6041
+    Epoch [9/50], Val Losses: mse: 14.9203, mae: 3.0308, huber: 2.5699, swd: 2.1975, ept: 55.5527
+    Epoch [9/50], Test Losses: mse: 15.5896, mae: 3.0434, huber: 2.5848, swd: 1.5858, ept: 65.1868
+      Epoch 9 composite train-obj: 1.544175
+            No improvement (3.6686), counter 4/5
+    Epoch [10/50], Train Losses: mse: 5.8043, mae: 1.7335, huber: 1.3086, swd: 0.2119, ept: 135.6962
+    Epoch [10/50], Val Losses: mse: 15.7711, mae: 3.1194, huber: 2.6573, swd: 2.1980, ept: 55.2834
+    Epoch [10/50], Test Losses: mse: 15.8237, mae: 3.0573, huber: 2.5989, swd: 1.5806, ept: 67.6484
+      Epoch 10 composite train-obj: 1.414525
+    Epoch [10/50], Test Losses: mse: 14.7330, mae: 2.9843, huber: 2.5253, swd: 1.4083, ept: 56.1406
+    Best round's Test MSE: 14.7330, MAE: 2.9843, SWD: 1.4083
+    Best round's Validation MSE: 13.8730, MAE: 2.9245, SWD: 2.0210
+    Best round's Test verification MSE : 14.7330, MAE: 2.9843, SWD: 1.4083
+    Time taken: 64.78 seconds
+    
+    ==================================================
+     Running experiment with seed 20 (3/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 15.3457, mae: 3.1067, huber: 2.6415, swd: 1.2351, ept: 22.7866
+    Epoch [1/50], Val Losses: mse: 14.9522, mae: 3.0691, huber: 2.6052, swd: 2.1474, ept: 39.0267
+    Epoch [1/50], Test Losses: mse: 16.1163, mae: 3.1576, huber: 2.6940, swd: 1.3864, ept: 40.5839
+      Epoch 1 composite train-obj: 3.259075
+            Val objective improved inf → 3.6789, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 12.1910, mae: 2.7119, huber: 2.2548, swd: 0.7386, ept: 47.0542
+    Epoch [2/50], Val Losses: mse: 14.6832, mae: 3.0214, huber: 2.5597, swd: 2.0134, ept: 44.4352
+    Epoch [2/50], Test Losses: mse: 15.6602, mae: 3.1009, huber: 2.6386, swd: 1.2897, ept: 45.8984
+      Epoch 2 composite train-obj: 2.624071
+            Val objective improved 3.6789 → 3.5663, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 10.9786, mae: 2.5364, huber: 2.0843, swd: 0.5599, ept: 58.7149
+    Epoch [3/50], Val Losses: mse: 14.7975, mae: 3.0244, huber: 2.5633, swd: 1.9435, ept: 47.0579
+    Epoch [3/50], Test Losses: mse: 15.5871, mae: 3.0804, huber: 2.6193, swd: 1.2807, ept: 50.5212
+      Epoch 3 composite train-obj: 2.364239
+            Val objective improved 3.5663 → 3.5351, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 9.9380, mae: 2.3793, huber: 1.9320, swd: 0.4314, ept: 70.5931
+    Epoch [4/50], Val Losses: mse: 14.4841, mae: 2.9903, huber: 2.5295, swd: 1.9689, ept: 47.4353
+    Epoch [4/50], Test Losses: mse: 15.5547, mae: 3.0590, huber: 2.5994, swd: 1.3079, ept: 53.1778
+      Epoch 4 composite train-obj: 2.147689
+            Val objective improved 3.5351 → 3.5139, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 8.9420, mae: 2.2281, huber: 1.7857, swd: 0.3509, ept: 82.8450
+    Epoch [5/50], Val Losses: mse: 14.9084, mae: 3.0393, huber: 2.5782, swd: 1.9356, ept: 49.0469
+    Epoch [5/50], Test Losses: mse: 15.7731, mae: 3.0763, huber: 2.6167, swd: 1.3531, ept: 56.2868
+      Epoch 5 composite train-obj: 1.961127
+            No improvement (3.5460), counter 1/5
+    Epoch [6/50], Train Losses: mse: 7.9347, mae: 2.0723, huber: 1.6353, swd: 0.2859, ept: 96.7325
+    Epoch [6/50], Val Losses: mse: 14.8417, mae: 3.0313, huber: 2.5698, swd: 1.9882, ept: 52.0889
+    Epoch [6/50], Test Losses: mse: 16.0488, mae: 3.0961, huber: 2.6371, swd: 1.4165, ept: 59.9079
+      Epoch 6 composite train-obj: 1.778235
+            No improvement (3.5639), counter 2/5
+    Epoch [7/50], Train Losses: mse: 6.9659, mae: 1.9197, huber: 1.4880, swd: 0.2520, ept: 112.2344
+    Epoch [7/50], Val Losses: mse: 15.3327, mae: 3.0792, huber: 2.6173, swd: 1.9834, ept: 52.8497
+    Epoch [7/50], Test Losses: mse: 16.2641, mae: 3.1108, huber: 2.6515, swd: 1.4419, ept: 61.9370
+      Epoch 7 composite train-obj: 1.614042
+            No improvement (3.6090), counter 3/5
+    Epoch [8/50], Train Losses: mse: 6.0681, mae: 1.7739, huber: 1.3477, swd: 0.2289, ept: 130.7605
+    Epoch [8/50], Val Losses: mse: 15.4098, mae: 3.0887, huber: 2.6270, swd: 2.0056, ept: 52.4900
+    Epoch [8/50], Test Losses: mse: 16.6333, mae: 3.1489, huber: 2.6895, swd: 1.4440, ept: 64.9897
+      Epoch 8 composite train-obj: 1.462189
+            No improvement (3.6298), counter 4/5
+    Epoch [9/50], Train Losses: mse: 5.2268, mae: 1.6308, huber: 1.2109, swd: 0.2100, ept: 152.0038
+    Epoch [9/50], Val Losses: mse: 16.0072, mae: 3.1479, huber: 2.6856, swd: 2.0704, ept: 54.6039
+    Epoch [9/50], Test Losses: mse: 16.6824, mae: 3.1518, huber: 2.6926, swd: 1.4995, ept: 67.9236
+      Epoch 9 composite train-obj: 1.315867
+    Epoch [9/50], Test Losses: mse: 15.5547, mae: 3.0590, huber: 2.5994, swd: 1.3079, ept: 53.1778
+    Best round's Test MSE: 15.5547, MAE: 3.0590, SWD: 1.3079
+    Best round's Validation MSE: 14.4841, MAE: 2.9903, SWD: 1.9689
+    Best round's Test verification MSE : 15.5547, MAE: 3.0590, SWD: 1.3079
+    Time taken: 60.16 seconds
+    
+    ==================================================
+    Experiment Summary (TimeMixer_lorenz96_seq336_pred336_20250512_2329)
+    ==================================================
+    Number of runs: 3
+    Seeds: [1955, 7, 20]
+    
+    Test Performance at Best Validation (mean ± std):
+      mse: 15.1882 ± 0.3412
+      mae: 3.0243 ± 0.0308
+      huber: 2.5651 ± 0.0305
+      swd: 1.3592 ± 0.0410
+      ept: 55.1385 ± 1.3865
+      count: 10.0000 ± 0.0000
+    
+    Corresponding Validation Performance (mean ± std):
+      mse: 14.0806 ± 0.2853
+      mae: 2.9477 ± 0.0302
+      huber: 2.4877 ± 0.0296
+      swd: 1.9016 ± 0.1337
+      ept: 50.0305 ± 2.2173
+      count: 10.0000 ± 0.0000
+    ==================================================
+    Three seeds Time taken: 181.89 seconds
+    
+    Experiment complete: TimeMixer_lorenz96_seq336_pred336_20250512_2329
+    Model: TimeMixer
+    Dataset: lorenz96
+    Sequence Length: 336
+    Prediction Length: 336
+    Seeds: [1955, 7, 20]
+    
+
+##### MSE + 0.5
+
+#### pred=720
+
+
+```python
+utils.reload_modules([utils])
+cfg = train_config.FlatTimeMixerConfig(
+    seq_len=336,
+    pred_len=720,
+    channels=data_mgr.datasets['lorenz96']['channels'],
+    enc_in=data_mgr.datasets['lorenz96']['channels'],
+    dec_in=data_mgr.datasets['lorenz96']['channels'],
+    c_out=data_mgr.datasets['lorenz96']['channels'],
+    batch_size=128,
+    learning_rate=9e-4,
+    seeds=[1955, 7, 20],
+    epochs=50, 
+)
+exp_mixer_96_96 = execute_model_evaluation('lorenz96', cfg, data_mgr, scale=False)
+
+```
+
+    Reloading modules...
+      Reloaded: utils
+    Module reload complete.
+    Shape of training data: torch.Size([13300, 6])
+    Shape of validation data: torch.Size([1900, 6])
+    Shape of testing data: torch.Size([3800, 6])
+    global_std.shape: torch.Size([6])
+    Global Std for lorenz96: tensor([3.6750, 3.6678, 3.7240, 3.7347, 3.8038, 3.5588], device='cuda:0')
+    Train set sample shapes: torch.Size([336, 6]), torch.Size([720, 6])
+    Validation set sample shapes: torch.Size([336, 6]), torch.Size([720, 6])
+    Test set data shapes: torch.Size([3800, 6]), torch.Size([3800, 6])
+    Number of batches in train_loader: 96
+    Batch 0: Data shape torch.Size([128, 336, 6]), Target shape torch.Size([128, 720, 6])
+    
+    ==================================================
+    Data Preparation: lorenz96
+    ==================================================
+    Sequence Length: 336
+    Prediction Length: 720
+    Batch Size: 128
+    Scaling: No
+    Train Split: 0.7
+    Val Split: 0.8
+    Training Batches: 96
+    Validation Batches: 7
+    Test Batches: 22
+    ==================================================
+    
+    ==================================================
+     Running experiment with seed 1955 (1/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 14.2419, mae: 3.0351, huber: 2.5691, swd: 3.1319, ept: 40.3926
+    Epoch [1/50], Val Losses: mse: 14.4385, mae: 3.0547, huber: 2.5885, swd: 3.1457, ept: 67.8247
+    Epoch [1/50], Test Losses: mse: 14.7995, mae: 3.0837, huber: 2.6181, swd: 3.1850, ept: 60.6006
+      Epoch 1 composite train-obj: 2.569136
+            Val objective improved inf → 2.5885, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 12.0238, mae: 2.7639, huber: 2.3031, swd: 2.6390, ept: 71.0226
+    Epoch [2/50], Val Losses: mse: 14.3704, mae: 3.0339, huber: 2.5690, swd: 2.7133, ept: 67.2702
+    Epoch [2/50], Test Losses: mse: 14.9305, mae: 3.0807, huber: 2.6159, swd: 2.6311, ept: 67.2299
+      Epoch 2 composite train-obj: 2.303111
+            Val objective improved 2.5885 → 2.5690, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 11.1928, mae: 2.6368, huber: 2.1797, swd: 2.2083, ept: 85.0265
+    Epoch [3/50], Val Losses: mse: 14.5599, mae: 3.0492, huber: 2.5841, swd: 2.5635, ept: 64.8093
+    Epoch [3/50], Test Losses: mse: 15.5094, mae: 3.1278, huber: 2.6636, swd: 2.3230, ept: 70.8449
+      Epoch 3 composite train-obj: 2.179688
+            No improvement (2.5841), counter 1/5
+    Epoch [4/50], Train Losses: mse: 10.4106, mae: 2.5131, huber: 2.0598, swd: 1.8831, ept: 96.1432
+    Epoch [4/50], Val Losses: mse: 15.1545, mae: 3.1035, huber: 2.6384, swd: 2.3018, ept: 63.0515
+    Epoch [4/50], Test Losses: mse: 15.6391, mae: 3.1230, huber: 2.6595, swd: 2.0554, ept: 71.6100
+      Epoch 4 composite train-obj: 2.059776
+            No improvement (2.6384), counter 2/5
+    Epoch [5/50], Train Losses: mse: 9.5052, mae: 2.3700, huber: 1.9209, swd: 1.5732, ept: 106.1696
+    Epoch [5/50], Val Losses: mse: 15.4127, mae: 3.1296, huber: 2.6645, swd: 2.1730, ept: 60.0760
+    Epoch [5/50], Test Losses: mse: 16.2323, mae: 3.1670, huber: 2.7040, swd: 1.9689, ept: 71.4515
+      Epoch 5 composite train-obj: 1.920873
+            No improvement (2.6645), counter 3/5
+    Epoch [6/50], Train Losses: mse: 8.4742, mae: 2.2077, huber: 1.7636, swd: 1.2840, ept: 117.6307
+    Epoch [6/50], Val Losses: mse: 16.4801, mae: 3.2365, huber: 2.7697, swd: 1.8730, ept: 57.3175
+    Epoch [6/50], Test Losses: mse: 17.1844, mae: 3.2536, huber: 2.7896, swd: 1.6819, ept: 71.2860
+      Epoch 6 composite train-obj: 1.763596
+            No improvement (2.7697), counter 4/5
+    Epoch [7/50], Train Losses: mse: 7.3686, mae: 2.0329, huber: 1.5943, swd: 1.0406, ept: 133.6425
+    Epoch [7/50], Val Losses: mse: 17.1271, mae: 3.2950, huber: 2.8280, swd: 1.7448, ept: 57.3693
+    Epoch [7/50], Test Losses: mse: 17.9200, mae: 3.3175, huber: 2.8531, swd: 1.5843, ept: 73.1153
+      Epoch 7 composite train-obj: 1.594270
+    Epoch [7/50], Test Losses: mse: 14.9305, mae: 3.0807, huber: 2.6159, swd: 2.6311, ept: 67.2299
+    Best round's Test MSE: 14.9305, MAE: 3.0807, SWD: 2.6311
+    Best round's Validation MSE: 14.3704, MAE: 3.0339, SWD: 2.7133
+    Best round's Test verification MSE : 14.9305, MAE: 3.0807, SWD: 2.6311
+    Time taken: 44.00 seconds
+    
+    ==================================================
+     Running experiment with seed 7 (2/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 13.5170, mae: 2.9637, huber: 2.4985, swd: 3.2838, ept: 44.0328
+    Epoch [1/50], Val Losses: mse: 14.6289, mae: 3.0746, huber: 2.6082, swd: 3.3455, ept: 62.7615
+    Epoch [1/50], Test Losses: mse: 15.0081, mae: 3.1034, huber: 2.6376, swd: 3.2760, ept: 60.3325
+      Epoch 1 composite train-obj: 2.498463
+            Val objective improved inf → 2.6082, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 11.6784, mae: 2.7126, huber: 2.2532, swd: 2.4397, ept: 75.0093
+    Epoch [2/50], Val Losses: mse: 14.3730, mae: 3.0298, huber: 2.5646, swd: 2.9706, ept: 66.4794
+    Epoch [2/50], Test Losses: mse: 15.0889, mae: 3.0920, huber: 2.6280, swd: 2.8757, ept: 67.9962
+      Epoch 2 composite train-obj: 2.253152
+            Val objective improved 2.6082 → 2.5646, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 10.6163, mae: 2.5476, huber: 2.0931, swd: 1.9597, ept: 92.0211
+    Epoch [3/50], Val Losses: mse: 14.6905, mae: 3.0659, huber: 2.6001, swd: 2.5642, ept: 64.1380
+    Epoch [3/50], Test Losses: mse: 15.4605, mae: 3.1105, huber: 2.6470, swd: 2.3166, ept: 71.0935
+      Epoch 3 composite train-obj: 2.093107
+            No improvement (2.6001), counter 1/5
+    Epoch [4/50], Train Losses: mse: 9.5367, mae: 2.3752, huber: 1.9261, swd: 1.5959, ept: 107.0451
+    Epoch [4/50], Val Losses: mse: 15.6505, mae: 3.1593, huber: 2.6934, swd: 2.3120, ept: 58.9806
+    Epoch [4/50], Test Losses: mse: 15.7326, mae: 3.1126, huber: 2.6501, swd: 1.9389, ept: 71.6273
+      Epoch 4 composite train-obj: 1.926065
+            No improvement (2.6934), counter 2/5
+    Epoch [5/50], Train Losses: mse: 8.3360, mae: 2.1851, huber: 1.7419, swd: 1.2707, ept: 123.3495
+    Epoch [5/50], Val Losses: mse: 16.1615, mae: 3.2090, huber: 2.7421, swd: 1.9448, ept: 58.0209
+    Epoch [5/50], Test Losses: mse: 16.5630, mae: 3.1930, huber: 2.7292, swd: 1.6388, ept: 73.8965
+      Epoch 5 composite train-obj: 1.741938
+            No improvement (2.7421), counter 3/5
+    Epoch [6/50], Train Losses: mse: 7.0847, mae: 1.9841, huber: 1.5475, swd: 0.9920, ept: 145.3311
+    Epoch [6/50], Val Losses: mse: 16.9877, mae: 3.2883, huber: 2.8207, swd: 1.7709, ept: 58.1531
+    Epoch [6/50], Test Losses: mse: 17.3902, mae: 3.2647, huber: 2.8004, swd: 1.4526, ept: 75.6054
+      Epoch 6 composite train-obj: 1.547498
+            No improvement (2.8207), counter 4/5
+    Epoch [7/50], Train Losses: mse: 5.9959, mae: 1.8022, huber: 1.3723, swd: 0.7857, ept: 173.6021
+    Epoch [7/50], Val Losses: mse: 18.0165, mae: 3.3934, huber: 2.9247, swd: 1.6685, ept: 59.5624
+    Epoch [7/50], Test Losses: mse: 17.9355, mae: 3.3128, huber: 2.8481, swd: 1.4507, ept: 79.3301
+      Epoch 7 composite train-obj: 1.372292
+    Epoch [7/50], Test Losses: mse: 15.0889, mae: 3.0920, huber: 2.6280, swd: 2.8757, ept: 67.9962
+    Best round's Test MSE: 15.0889, MAE: 3.0920, SWD: 2.8757
+    Best round's Validation MSE: 14.3730, MAE: 3.0298, SWD: 2.9706
+    Best round's Test verification MSE : 15.0889, MAE: 3.0920, SWD: 2.8757
+    Time taken: 43.22 seconds
+    
+    ==================================================
+     Running experiment with seed 20 (3/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 13.4183, mae: 2.9500, huber: 2.4850, swd: 3.3309, ept: 44.0825
+    Epoch [1/50], Val Losses: mse: 14.3772, mae: 3.0415, huber: 2.5754, swd: 3.1029, ept: 64.0023
+    Epoch [1/50], Test Losses: mse: 15.0636, mae: 3.1084, huber: 2.6423, swd: 2.9297, ept: 60.5758
+      Epoch 1 composite train-obj: 2.485039
+            Val objective improved inf → 2.5754, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 11.3924, mae: 2.6660, huber: 2.2080, swd: 2.3218, ept: 77.7273
+    Epoch [2/50], Val Losses: mse: 14.7852, mae: 3.0810, huber: 2.6150, swd: 2.7629, ept: 55.9749
+    Epoch [2/50], Test Losses: mse: 15.4495, mae: 3.1277, huber: 2.6628, swd: 2.4755, ept: 64.1268
+      Epoch 2 composite train-obj: 2.207964
+            No improvement (2.6150), counter 1/5
+    Epoch [3/50], Train Losses: mse: 10.3260, mae: 2.4960, huber: 2.0435, swd: 1.8718, ept: 93.9669
+    Epoch [3/50], Val Losses: mse: 15.1018, mae: 3.1008, huber: 2.6354, swd: 2.5040, ept: 57.7686
+    Epoch [3/50], Test Losses: mse: 15.9305, mae: 3.1524, huber: 2.6886, swd: 2.1371, ept: 70.1080
+      Epoch 3 composite train-obj: 2.043468
+            No improvement (2.6354), counter 2/5
+    Epoch [4/50], Train Losses: mse: 9.2331, mae: 2.3195, huber: 1.8728, swd: 1.5119, ept: 109.8447
+    Epoch [4/50], Val Losses: mse: 16.0071, mae: 3.1929, huber: 2.7269, swd: 2.3569, ept: 58.0134
+    Epoch [4/50], Test Losses: mse: 16.4245, mae: 3.1904, huber: 2.7265, swd: 2.1469, ept: 71.8258
+      Epoch 4 composite train-obj: 1.872828
+            No improvement (2.7269), counter 3/5
+    Epoch [5/50], Train Losses: mse: 8.0703, mae: 2.1338, huber: 1.6931, swd: 1.2174, ept: 128.7917
+    Epoch [5/50], Val Losses: mse: 17.1886, mae: 3.3069, huber: 2.8396, swd: 1.9685, ept: 57.2600
+    Epoch [5/50], Test Losses: mse: 17.1358, mae: 3.2432, huber: 2.7794, swd: 1.6625, ept: 75.0118
+      Epoch 5 composite train-obj: 1.693140
+            No improvement (2.8396), counter 4/5
+    Epoch [6/50], Train Losses: mse: 6.9763, mae: 1.9575, huber: 1.5227, swd: 0.9837, ept: 152.1932
+    Epoch [6/50], Val Losses: mse: 18.1437, mae: 3.3901, huber: 2.9225, swd: 1.7650, ept: 57.6323
+    Epoch [6/50], Test Losses: mse: 17.8922, mae: 3.3068, huber: 2.8425, swd: 1.4706, ept: 77.6663
+      Epoch 6 composite train-obj: 1.522653
+    Epoch [6/50], Test Losses: mse: 15.0636, mae: 3.1084, huber: 2.6423, swd: 2.9297, ept: 60.5758
+    Best round's Test MSE: 15.0636, MAE: 3.1084, SWD: 2.9297
+    Best round's Validation MSE: 14.3772, MAE: 3.0415, SWD: 3.1029
+    Best round's Test verification MSE : 15.0636, MAE: 3.1084, SWD: 2.9297
+    Time taken: 37.39 seconds
+    
+    ==================================================
+    Experiment Summary (TimeMixer_lorenz96_seq336_pred720_20250512_2229)
+    ==================================================
+    Number of runs: 3
+    Seeds: [1955, 7, 20]
+    
+    Test Performance at Best Validation (mean ± std):
+      mse: 15.0277 ± 0.0695
+      mae: 3.0937 ± 0.0114
+      huber: 2.6287 ± 0.0108
+      swd: 2.8122 ± 0.1300
+      ept: 65.2673 ± 3.3321
+      count: 7.0000 ± 0.0000
+    
+    Corresponding Validation Performance (mean ± std):
+      mse: 14.3735 ± 0.0028
+      mae: 3.0351 ± 0.0048
+      huber: 2.5697 ± 0.0044
+      swd: 2.9290 ± 0.1618
+      ept: 65.9173 ± 1.3921
+      count: 7.0000 ± 0.0000
+    ==================================================
+    Three seeds Time taken: 124.69 seconds
+    
+    Experiment complete: TimeMixer_lorenz96_seq336_pred720_20250512_2229
+    Model: TimeMixer
+    Dataset: lorenz96
+    Sequence Length: 336
+    Prediction Length: 720
+    Seeds: [1955, 7, 20]
+    
+
+### PatchTST
+
+#### pred=96
+
+
+```python
+utils.reload_modules([utils])
+cfg = train_config.FlatPatchTSTConfig(
+    seq_len=336,
+    pred_len=96,
+    channels=data_mgr.datasets['lorenz96']['channels'],
+    enc_in=data_mgr.datasets['lorenz96']['channels'],
+    dec_in=data_mgr.datasets['lorenz96']['channels'],
+    c_out=data_mgr.datasets['lorenz96']['channels'],
+    batch_size=128,
+    learning_rate=9e-4,
+    seeds=[1955, 7, 20],
+    epochs=50,
+    task_name='long_term_forecast',
+    factor=3,
+)
+exp = execute_model_evaluation('lorenz96', cfg, data_mgr, scale=False)
+```
+
+    Reloading modules...
+      Reloaded: utils
+    Module reload complete.
+    Shape of training data: torch.Size([13300, 6])
+    Shape of validation data: torch.Size([1900, 6])
+    Shape of testing data: torch.Size([3800, 6])
+    global_std.shape: torch.Size([6])
+    Global Std for lorenz96: tensor([3.6750, 3.6678, 3.7240, 3.7347, 3.8038, 3.5588], device='cuda:0')
+    Train set sample shapes: torch.Size([336, 6]), torch.Size([96, 6])
+    Validation set sample shapes: torch.Size([336, 6]), torch.Size([96, 6])
+    Test set data shapes: torch.Size([3800, 6]), torch.Size([3800, 6])
+    Number of batches in train_loader: 101
+    Batch 0: Data shape torch.Size([128, 336, 6]), Target shape torch.Size([128, 96, 6])
+    
+    ==================================================
+    Data Preparation: lorenz96
+    ==================================================
+    Sequence Length: 336
+    Prediction Length: 96
+    Batch Size: 128
+    Scaling: No
+    Train Split: 0.7
+    Val Split: 0.8
+    Training Batches: 101
+    Validation Batches: 12
+    Test Batches: 27
+    ==================================================
+    
+    ==================================================
+     Running experiment with seed 1955 (1/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 11.7668, mae: 2.6235, huber: 2.1704, swd: 2.8322, ept: 23.8832
+    Epoch [1/50], Val Losses: mse: 9.5089, mae: 2.3450, huber: 1.8997, swd: 2.5684, ept: 52.7119
+    Epoch [1/50], Test Losses: mse: 9.7748, mae: 2.3599, huber: 1.9146, swd: 2.5353, ept: 52.4940
+      Epoch 1 composite train-obj: 2.170414
+            Val objective improved inf → 1.8997, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 8.6733, mae: 2.1966, huber: 1.7566, swd: 2.1541, ept: 31.8595
+    Epoch [2/50], Val Losses: mse: 8.9404, mae: 2.2508, huber: 1.8112, swd: 2.4336, ept: 57.9606
+    Epoch [2/50], Test Losses: mse: 9.1394, mae: 2.2494, huber: 1.8109, swd: 2.4460, ept: 58.2198
+      Epoch 2 composite train-obj: 1.756559
+            Val objective improved 1.8997 → 1.8112, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 7.6127, mae: 2.0316, huber: 1.5984, swd: 1.8240, ept: 34.0579
+    Epoch [3/50], Val Losses: mse: 8.0265, mae: 2.1284, huber: 1.6927, swd: 2.2685, ept: 61.8100
+    Epoch [3/50], Test Losses: mse: 8.2195, mae: 2.1381, huber: 1.7038, swd: 2.2909, ept: 60.6411
+      Epoch 3 composite train-obj: 1.598414
+            Val objective improved 1.8112 → 1.6927, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 6.8584, mae: 1.9101, huber: 1.4823, swd: 1.5958, ept: 35.4667
+    Epoch [4/50], Val Losses: mse: 7.7742, mae: 2.0641, huber: 1.6312, swd: 2.1183, ept: 63.6833
+    Epoch [4/50], Test Losses: mse: 7.5919, mae: 2.0256, huber: 1.5947, swd: 2.0117, ept: 64.3018
+      Epoch 4 composite train-obj: 1.482333
+            Val objective improved 1.6927 → 1.6312, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 6.3352, mae: 1.8196, huber: 1.3966, swd: 1.4360, ept: 36.3389
+    Epoch [5/50], Val Losses: mse: 8.1883, mae: 2.1044, huber: 1.6740, swd: 2.2671, ept: 63.4124
+    Epoch [5/50], Test Losses: mse: 7.4735, mae: 1.9940, huber: 1.5675, swd: 2.0424, ept: 65.2375
+      Epoch 5 composite train-obj: 1.396574
+            No improvement (1.6740), counter 1/5
+    Epoch [6/50], Train Losses: mse: 5.8813, mae: 1.7408, huber: 1.3216, swd: 1.3178, ept: 37.0978
+    Epoch [6/50], Val Losses: mse: 7.4667, mae: 2.0267, huber: 1.5953, swd: 1.9057, ept: 64.7550
+    Epoch [6/50], Test Losses: mse: 7.0390, mae: 1.9432, huber: 1.5148, swd: 1.8633, ept: 67.5057
+      Epoch 6 composite train-obj: 1.321607
+            Val objective improved 1.6312 → 1.5953, saving checkpoint.
+    Epoch [7/50], Train Losses: mse: 5.5945, mae: 1.6905, huber: 1.2742, swd: 1.2479, ept: 37.6583
+    Epoch [7/50], Val Losses: mse: 7.5766, mae: 2.0339, huber: 1.6025, swd: 2.0554, ept: 65.6086
+    Epoch [7/50], Test Losses: mse: 6.8359, mae: 1.8843, huber: 1.4604, swd: 1.8510, ept: 70.0765
+      Epoch 7 composite train-obj: 1.274183
+            No improvement (1.6025), counter 1/5
+    Epoch [8/50], Train Losses: mse: 5.2769, mae: 1.6291, huber: 1.2163, swd: 1.1662, ept: 38.1041
+    Epoch [8/50], Val Losses: mse: 7.4000, mae: 1.9987, huber: 1.5739, swd: 1.9296, ept: 64.9681
+    Epoch [8/50], Test Losses: mse: 6.4996, mae: 1.8403, huber: 1.4202, swd: 1.7272, ept: 70.2692
+      Epoch 8 composite train-obj: 1.216302
+            Val objective improved 1.5953 → 1.5739, saving checkpoint.
+    Epoch [9/50], Train Losses: mse: 5.0312, mae: 1.5832, huber: 1.1730, swd: 1.0890, ept: 38.5255
+    Epoch [9/50], Val Losses: mse: 7.3594, mae: 1.9797, huber: 1.5563, swd: 1.8956, ept: 67.0767
+    Epoch [9/50], Test Losses: mse: 6.5096, mae: 1.8244, huber: 1.4071, swd: 1.7067, ept: 71.7082
+      Epoch 9 composite train-obj: 1.172994
+            Val objective improved 1.5739 → 1.5563, saving checkpoint.
+    Epoch [10/50], Train Losses: mse: 4.8065, mae: 1.5405, huber: 1.1327, swd: 1.0271, ept: 38.9155
+    Epoch [10/50], Val Losses: mse: 7.4510, mae: 2.0048, huber: 1.5795, swd: 1.9465, ept: 66.2980
+    Epoch [10/50], Test Losses: mse: 6.3877, mae: 1.8140, huber: 1.3962, swd: 1.6913, ept: 71.9031
+      Epoch 10 composite train-obj: 1.132734
+            No improvement (1.5795), counter 1/5
+    Epoch [11/50], Train Losses: mse: 4.6694, mae: 1.5133, huber: 1.1071, swd: 0.9919, ept: 39.0831
+    Epoch [11/50], Val Losses: mse: 7.3727, mae: 1.9683, huber: 1.5456, swd: 1.8822, ept: 68.0188
+    Epoch [11/50], Test Losses: mse: 6.3781, mae: 1.7861, huber: 1.3720, swd: 1.7308, ept: 72.3445
+      Epoch 11 composite train-obj: 1.107058
+            Val objective improved 1.5563 → 1.5456, saving checkpoint.
+    Epoch [12/50], Train Losses: mse: 4.4823, mae: 1.4747, huber: 1.0715, swd: 0.9382, ept: 39.3337
+    Epoch [12/50], Val Losses: mse: 7.4788, mae: 2.0005, huber: 1.5756, swd: 1.8678, ept: 67.4205
+    Epoch [12/50], Test Losses: mse: 6.3887, mae: 1.7953, huber: 1.3806, swd: 1.5725, ept: 72.4390
+      Epoch 12 composite train-obj: 1.071481
+            No improvement (1.5756), counter 1/5
+    Epoch [13/50], Train Losses: mse: 4.3511, mae: 1.4482, huber: 1.0462, swd: 0.8951, ept: 39.6636
+    Epoch [13/50], Val Losses: mse: 7.3534, mae: 1.9869, huber: 1.5617, swd: 1.9162, ept: 67.4057
+    Epoch [13/50], Test Losses: mse: 6.2516, mae: 1.7789, huber: 1.3626, swd: 1.5948, ept: 72.8937
+      Epoch 13 composite train-obj: 1.046238
+            No improvement (1.5617), counter 2/5
+    Epoch [14/50], Train Losses: mse: 4.2369, mae: 1.4259, huber: 1.0252, swd: 0.8680, ept: 39.6226
+    Epoch [14/50], Val Losses: mse: 7.5184, mae: 1.9860, huber: 1.5606, swd: 1.9192, ept: 68.2946
+    Epoch [14/50], Test Losses: mse: 6.3615, mae: 1.7725, huber: 1.3586, swd: 1.6111, ept: 73.0735
+      Epoch 14 composite train-obj: 1.025175
+            No improvement (1.5606), counter 3/5
+    Epoch [15/50], Train Losses: mse: 4.1293, mae: 1.4015, huber: 1.0026, swd: 0.8306, ept: 39.7571
+    Epoch [15/50], Val Losses: mse: 7.2923, mae: 1.9694, huber: 1.5433, swd: 1.9880, ept: 68.4163
+    Epoch [15/50], Test Losses: mse: 6.2220, mae: 1.7634, huber: 1.3478, swd: 1.6513, ept: 73.4106
+      Epoch 15 composite train-obj: 1.002648
+            Val objective improved 1.5456 → 1.5433, saving checkpoint.
+    Epoch [16/50], Train Losses: mse: 4.0444, mae: 1.3821, huber: 0.9848, swd: 0.8064, ept: 39.7904
+    Epoch [16/50], Val Losses: mse: 7.1333, mae: 1.9531, huber: 1.5282, swd: 1.9521, ept: 68.2937
+    Epoch [16/50], Test Losses: mse: 6.0824, mae: 1.7446, huber: 1.3305, swd: 1.6292, ept: 73.3925
+      Epoch 16 composite train-obj: 0.984792
+            Val objective improved 1.5433 → 1.5282, saving checkpoint.
+    Epoch [17/50], Train Losses: mse: 3.9594, mae: 1.3659, huber: 0.9696, swd: 0.7832, ept: 39.9715
+    Epoch [17/50], Val Losses: mse: 7.2698, mae: 1.9715, huber: 1.5441, swd: 1.8861, ept: 68.9334
+    Epoch [17/50], Test Losses: mse: 6.0746, mae: 1.7398, huber: 1.3243, swd: 1.5070, ept: 73.9714
+      Epoch 17 composite train-obj: 0.969571
+            No improvement (1.5441), counter 1/5
+    Epoch [18/50], Train Losses: mse: 3.8492, mae: 1.3395, huber: 0.9453, swd: 0.7462, ept: 39.9975
+    Epoch [18/50], Val Losses: mse: 7.1868, mae: 1.9309, huber: 1.5096, swd: 1.8205, ept: 68.9590
+    Epoch [18/50], Test Losses: mse: 5.9835, mae: 1.7095, huber: 1.2983, swd: 1.5004, ept: 74.3402
+      Epoch 18 composite train-obj: 0.945312
+            Val objective improved 1.5282 → 1.5096, saving checkpoint.
+    Epoch [19/50], Train Losses: mse: 3.7851, mae: 1.3234, huber: 0.9310, swd: 0.7304, ept: 40.2244
+    Epoch [19/50], Val Losses: mse: 7.0240, mae: 1.9375, huber: 1.5111, swd: 1.9613, ept: 69.4020
+    Epoch [19/50], Test Losses: mse: 5.9285, mae: 1.7132, huber: 1.2991, swd: 1.5924, ept: 74.6224
+      Epoch 19 composite train-obj: 0.930985
+            No improvement (1.5111), counter 1/5
+    Epoch [20/50], Train Losses: mse: 3.7131, mae: 1.3089, huber: 0.9170, swd: 0.7095, ept: 40.3706
+    Epoch [20/50], Val Losses: mse: 7.1314, mae: 1.9354, huber: 1.5161, swd: 1.8036, ept: 69.0591
+    Epoch [20/50], Test Losses: mse: 5.9260, mae: 1.7073, huber: 1.2979, swd: 1.4765, ept: 74.3253
+      Epoch 20 composite train-obj: 0.917008
+            No improvement (1.5161), counter 2/5
+    Epoch [21/50], Train Losses: mse: 3.6637, mae: 1.2973, huber: 0.9066, swd: 0.6954, ept: 40.1964
+    Epoch [21/50], Val Losses: mse: 7.0824, mae: 1.9457, huber: 1.5212, swd: 1.8502, ept: 68.8914
+    Epoch [21/50], Test Losses: mse: 5.8830, mae: 1.7071, huber: 1.2958, swd: 1.4806, ept: 74.6423
+      Epoch 21 composite train-obj: 0.906561
+            No improvement (1.5212), counter 3/5
+    Epoch [22/50], Train Losses: mse: 3.5921, mae: 1.2806, huber: 0.8913, swd: 0.6741, ept: 40.4011
+    Epoch [22/50], Val Losses: mse: 6.9754, mae: 1.9086, huber: 1.4874, swd: 1.7733, ept: 70.1947
+    Epoch [22/50], Test Losses: mse: 5.8894, mae: 1.6917, huber: 1.2844, swd: 1.4784, ept: 74.9325
+      Epoch 22 composite train-obj: 0.891325
+            Val objective improved 1.5096 → 1.4874, saving checkpoint.
+    Epoch [23/50], Train Losses: mse: 3.5364, mae: 1.2675, huber: 0.8794, swd: 0.6545, ept: 40.3974
+    Epoch [23/50], Val Losses: mse: 7.0178, mae: 1.9113, huber: 1.4922, swd: 1.8480, ept: 68.9369
+    Epoch [23/50], Test Losses: mse: 5.7688, mae: 1.6621, huber: 1.2558, swd: 1.4884, ept: 75.6313
+      Epoch 23 composite train-obj: 0.879419
+            No improvement (1.4922), counter 1/5
+    Epoch [24/50], Train Losses: mse: 3.5006, mae: 1.2599, huber: 0.8719, swd: 0.6419, ept: 40.5972
+    Epoch [24/50], Val Losses: mse: 7.0252, mae: 1.9062, huber: 1.4857, swd: 1.8850, ept: 70.4665
+    Epoch [24/50], Test Losses: mse: 5.7969, mae: 1.6713, huber: 1.2645, swd: 1.5400, ept: 75.3874
+      Epoch 24 composite train-obj: 0.871885
+            Val objective improved 1.4874 → 1.4857, saving checkpoint.
+    Epoch [25/50], Train Losses: mse: 3.4518, mae: 1.2479, huber: 0.8614, swd: 0.6378, ept: 40.4920
+    Epoch [25/50], Val Losses: mse: 6.8623, mae: 1.8996, huber: 1.4792, swd: 1.7868, ept: 70.1047
+    Epoch [25/50], Test Losses: mse: 5.7532, mae: 1.6560, huber: 1.2517, swd: 1.4337, ept: 75.7927
+      Epoch 25 composite train-obj: 0.861414
+            Val objective improved 1.4857 → 1.4792, saving checkpoint.
+    Epoch [26/50], Train Losses: mse: 3.4011, mae: 1.2353, huber: 0.8494, swd: 0.6135, ept: 40.5427
+    Epoch [26/50], Val Losses: mse: 6.9091, mae: 1.9092, huber: 1.4887, swd: 1.8998, ept: 69.8653
+    Epoch [26/50], Test Losses: mse: 5.7376, mae: 1.6626, huber: 1.2576, swd: 1.4875, ept: 75.2433
+      Epoch 26 composite train-obj: 0.849449
+            No improvement (1.4887), counter 1/5
+    Epoch [27/50], Train Losses: mse: 3.3649, mae: 1.2255, huber: 0.8407, swd: 0.6104, ept: 40.6001
+    Epoch [27/50], Val Losses: mse: 7.0265, mae: 1.9152, huber: 1.4931, swd: 1.7798, ept: 70.2667
+    Epoch [27/50], Test Losses: mse: 5.8034, mae: 1.6645, huber: 1.2580, swd: 1.4217, ept: 75.5323
+      Epoch 27 composite train-obj: 0.840730
+            No improvement (1.4931), counter 2/5
+    Epoch [28/50], Train Losses: mse: 3.3149, mae: 1.2131, huber: 0.8297, swd: 0.5844, ept: 40.7052
+    Epoch [28/50], Val Losses: mse: 6.9355, mae: 1.9136, huber: 1.4915, swd: 1.8448, ept: 70.0917
+    Epoch [28/50], Test Losses: mse: 5.7497, mae: 1.6488, huber: 1.2456, swd: 1.4268, ept: 75.8881
+      Epoch 28 composite train-obj: 0.829699
+            No improvement (1.4915), counter 3/5
+    Epoch [29/50], Train Losses: mse: 3.2744, mae: 1.2019, huber: 0.8200, swd: 0.5798, ept: 40.7595
+    Epoch [29/50], Val Losses: mse: 6.7292, mae: 1.8944, huber: 1.4714, swd: 1.8877, ept: 70.3001
+    Epoch [29/50], Test Losses: mse: 5.5094, mae: 1.6140, huber: 1.2138, swd: 1.4721, ept: 76.5422
+      Epoch 29 composite train-obj: 0.819973
+            Val objective improved 1.4792 → 1.4714, saving checkpoint.
+    Epoch [30/50], Train Losses: mse: 3.2494, mae: 1.1949, huber: 0.8137, swd: 0.5703, ept: 40.6408
+    Epoch [30/50], Val Losses: mse: 6.6287, mae: 1.8540, huber: 1.4354, swd: 1.8063, ept: 71.4183
+    Epoch [30/50], Test Losses: mse: 5.4971, mae: 1.6135, huber: 1.2106, swd: 1.4266, ept: 76.9244
+      Epoch 30 composite train-obj: 0.813718
+            Val objective improved 1.4714 → 1.4354, saving checkpoint.
+    Epoch [31/50], Train Losses: mse: 3.2063, mae: 1.1842, huber: 0.8037, swd: 0.5547, ept: 40.5741
+    Epoch [31/50], Val Losses: mse: 7.0624, mae: 1.9357, huber: 1.5115, swd: 1.8273, ept: 69.9582
+    Epoch [31/50], Test Losses: mse: 5.7450, mae: 1.6586, huber: 1.2497, swd: 1.4008, ept: 75.9435
+      Epoch 31 composite train-obj: 0.803685
+            No improvement (1.5115), counter 1/5
+    Epoch [32/50], Train Losses: mse: 3.1758, mae: 1.1769, huber: 0.7972, swd: 0.5523, ept: 40.7543
+    Epoch [32/50], Val Losses: mse: 6.7993, mae: 1.9007, huber: 1.4792, swd: 1.8327, ept: 70.3079
+    Epoch [32/50], Test Losses: mse: 5.5144, mae: 1.6135, huber: 1.2117, swd: 1.4004, ept: 76.4210
+      Epoch 32 composite train-obj: 0.797188
+            No improvement (1.4792), counter 2/5
+    Epoch [33/50], Train Losses: mse: 3.1560, mae: 1.1714, huber: 0.7924, swd: 0.5432, ept: 40.8283
+    Epoch [33/50], Val Losses: mse: 6.7073, mae: 1.8748, huber: 1.4542, swd: 1.7975, ept: 71.3491
+    Epoch [33/50], Test Losses: mse: 5.5776, mae: 1.6258, huber: 1.2219, swd: 1.4046, ept: 76.4474
+      Epoch 33 composite train-obj: 0.792362
+            No improvement (1.4542), counter 3/5
+    Epoch [34/50], Train Losses: mse: 3.1180, mae: 1.1627, huber: 0.7843, swd: 0.5339, ept: 40.7938
+    Epoch [34/50], Val Losses: mse: 6.7659, mae: 1.8858, huber: 1.4654, swd: 1.8240, ept: 70.9084
+    Epoch [34/50], Test Losses: mse: 5.5420, mae: 1.6181, huber: 1.2152, swd: 1.4325, ept: 76.7826
+      Epoch 34 composite train-obj: 0.784257
+            No improvement (1.4654), counter 4/5
+    Epoch [35/50], Train Losses: mse: 3.0879, mae: 1.1525, huber: 0.7756, swd: 0.5199, ept: 40.8631
+    Epoch [35/50], Val Losses: mse: 6.6859, mae: 1.8722, huber: 1.4517, swd: 1.7528, ept: 70.9716
+    Epoch [35/50], Test Losses: mse: 5.5393, mae: 1.6113, huber: 1.2087, swd: 1.3480, ept: 76.8779
+      Epoch 35 composite train-obj: 0.775604
+    Epoch [35/50], Test Losses: mse: 5.4971, mae: 1.6135, huber: 1.2106, swd: 1.4266, ept: 76.9244
+    Best round's Test MSE: 5.4971, MAE: 1.6135, SWD: 1.4266
+    Best round's Validation MSE: 6.6287, MAE: 1.8540, SWD: 1.8063
+    Best round's Test verification MSE : 5.4971, MAE: 1.6135, SWD: 1.4266
+    Time taken: 134.04 seconds
+    
+    ==================================================
+     Running experiment with seed 7 (2/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 11.5813, mae: 2.6034, huber: 2.1507, swd: 2.7584, ept: 24.5522
+    Epoch [1/50], Val Losses: mse: 8.8585, mae: 2.2137, huber: 1.7776, swd: 2.5545, ept: 57.2114
+    Epoch [1/50], Test Losses: mse: 9.4904, mae: 2.2705, huber: 1.8333, swd: 2.4479, ept: 56.4668
+      Epoch 1 composite train-obj: 2.150689
+            Val objective improved inf → 1.7776, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 8.5134, mae: 2.1696, huber: 1.7309, swd: 2.1053, ept: 32.3374
+    Epoch [2/50], Val Losses: mse: 8.6063, mae: 2.1766, huber: 1.7432, swd: 3.1955, ept: 58.3175
+    Epoch [2/50], Test Losses: mse: 8.7359, mae: 2.1746, huber: 1.7415, swd: 3.0403, ept: 59.8349
+      Epoch 2 composite train-obj: 1.730872
+            Val objective improved 1.7776 → 1.7432, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 7.5389, mae: 2.0173, huber: 1.5847, swd: 1.8093, ept: 34.1421
+    Epoch [3/50], Val Losses: mse: 8.2231, mae: 2.1420, huber: 1.7063, swd: 2.2581, ept: 58.7773
+    Epoch [3/50], Test Losses: mse: 8.0248, mae: 2.0664, huber: 1.6348, swd: 2.0646, ept: 63.5409
+      Epoch 3 composite train-obj: 1.584721
+            Val objective improved 1.7432 → 1.7063, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 6.7910, mae: 1.8944, huber: 1.4679, swd: 1.5967, ept: 35.5358
+    Epoch [4/50], Val Losses: mse: 7.8042, mae: 2.0607, huber: 1.6317, swd: 2.3117, ept: 62.5865
+    Epoch [4/50], Test Losses: mse: 7.4906, mae: 2.0004, huber: 1.5737, swd: 2.2436, ept: 65.2625
+      Epoch 4 composite train-obj: 1.467911
+            Val objective improved 1.7063 → 1.6317, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 6.3003, mae: 1.8126, huber: 1.3894, swd: 1.4673, ept: 36.6171
+    Epoch [5/50], Val Losses: mse: 7.5827, mae: 2.0226, huber: 1.5966, swd: 2.0700, ept: 63.2467
+    Epoch [5/50], Test Losses: mse: 7.3676, mae: 1.9510, huber: 1.5282, swd: 1.9659, ept: 67.5930
+      Epoch 5 composite train-obj: 1.389366
+            Val objective improved 1.6317 → 1.5966, saving checkpoint.
+    Epoch [6/50], Train Losses: mse: 5.8739, mae: 1.7371, huber: 1.3184, swd: 1.3410, ept: 37.0517
+    Epoch [6/50], Val Losses: mse: 7.5000, mae: 2.0092, huber: 1.5843, swd: 2.0301, ept: 64.8534
+    Epoch [6/50], Test Losses: mse: 6.9750, mae: 1.8876, huber: 1.4683, swd: 1.8552, ept: 68.8604
+      Epoch 6 composite train-obj: 1.318382
+            Val objective improved 1.5966 → 1.5843, saving checkpoint.
+    Epoch [7/50], Train Losses: mse: 5.5304, mae: 1.6719, huber: 1.2573, swd: 1.2473, ept: 37.7887
+    Epoch [7/50], Val Losses: mse: 7.1784, mae: 1.9603, huber: 1.5368, swd: 1.9428, ept: 65.7673
+    Epoch [7/50], Test Losses: mse: 6.9904, mae: 1.8952, huber: 1.4730, swd: 1.9166, ept: 69.3312
+      Epoch 7 composite train-obj: 1.257265
+            Val objective improved 1.5843 → 1.5368, saving checkpoint.
+    Epoch [8/50], Train Losses: mse: 5.2029, mae: 1.6142, huber: 1.2021, swd: 1.1627, ept: 38.1897
+    Epoch [8/50], Val Losses: mse: 7.1712, mae: 1.9943, huber: 1.5651, swd: 2.2190, ept: 65.9563
+    Epoch [8/50], Test Losses: mse: 6.6470, mae: 1.8610, huber: 1.4371, swd: 2.0290, ept: 70.8875
+      Epoch 8 composite train-obj: 1.202124
+            No improvement (1.5651), counter 1/5
+    Epoch [9/50], Train Losses: mse: 5.0181, mae: 1.5796, huber: 1.1692, swd: 1.1087, ept: 38.5899
+    Epoch [9/50], Val Losses: mse: 7.4144, mae: 1.9881, huber: 1.5626, swd: 2.0112, ept: 66.1151
+    Epoch [9/50], Test Losses: mse: 6.7065, mae: 1.8475, huber: 1.4280, swd: 1.7982, ept: 70.5337
+      Epoch 9 composite train-obj: 1.169181
+            No improvement (1.5626), counter 2/5
+    Epoch [10/50], Train Losses: mse: 4.8153, mae: 1.5387, huber: 1.1314, swd: 1.0467, ept: 38.9203
+    Epoch [10/50], Val Losses: mse: 7.0445, mae: 1.9416, huber: 1.5206, swd: 1.9499, ept: 66.6903
+    Epoch [10/50], Test Losses: mse: 6.5335, mae: 1.8117, huber: 1.3966, swd: 1.8255, ept: 72.0051
+      Epoch 10 composite train-obj: 1.131406
+            Val objective improved 1.5368 → 1.5206, saving checkpoint.
+    Epoch [11/50], Train Losses: mse: 4.6315, mae: 1.5024, huber: 1.0974, swd: 0.9963, ept: 39.2544
+    Epoch [11/50], Val Losses: mse: 7.4551, mae: 2.0040, huber: 1.5773, swd: 2.0433, ept: 66.6316
+    Epoch [11/50], Test Losses: mse: 6.3436, mae: 1.7948, huber: 1.3772, swd: 1.6679, ept: 72.3697
+      Epoch 11 composite train-obj: 1.097414
+            No improvement (1.5773), counter 1/5
+    Epoch [12/50], Train Losses: mse: 4.5032, mae: 1.4748, huber: 1.0721, swd: 0.9571, ept: 39.3263
+    Epoch [12/50], Val Losses: mse: 7.3460, mae: 1.9750, huber: 1.5539, swd: 2.0633, ept: 66.8835
+    Epoch [12/50], Test Losses: mse: 6.3196, mae: 1.7799, huber: 1.3650, swd: 1.7958, ept: 73.2868
+      Epoch 12 composite train-obj: 1.072101
+            No improvement (1.5539), counter 2/5
+    Epoch [13/50], Train Losses: mse: 4.3637, mae: 1.4487, huber: 1.0468, swd: 0.9182, ept: 39.6183
+    Epoch [13/50], Val Losses: mse: 7.1038, mae: 1.9355, huber: 1.5119, swd: 1.9410, ept: 69.6084
+    Epoch [13/50], Test Losses: mse: 6.2902, mae: 1.7641, huber: 1.3487, swd: 1.7237, ept: 73.6254
+      Epoch 13 composite train-obj: 1.046831
+            Val objective improved 1.5206 → 1.5119, saving checkpoint.
+    Epoch [14/50], Train Losses: mse: 4.2500, mae: 1.4258, huber: 1.0256, swd: 0.8783, ept: 39.6248
+    Epoch [14/50], Val Losses: mse: 6.9970, mae: 1.9070, huber: 1.4881, swd: 1.8543, ept: 69.6199
+    Epoch [14/50], Test Losses: mse: 6.3289, mae: 1.7564, huber: 1.3468, swd: 1.7182, ept: 73.5872
+      Epoch 14 composite train-obj: 1.025580
+            Val objective improved 1.5119 → 1.4881, saving checkpoint.
+    Epoch [15/50], Train Losses: mse: 4.1392, mae: 1.4011, huber: 1.0029, swd: 0.8508, ept: 39.8456
+    Epoch [15/50], Val Losses: mse: 7.0918, mae: 1.9466, huber: 1.5201, swd: 1.8346, ept: 68.5923
+    Epoch [15/50], Test Losses: mse: 6.1474, mae: 1.7581, huber: 1.3411, swd: 1.6314, ept: 74.2088
+      Epoch 15 composite train-obj: 1.002854
+            No improvement (1.5201), counter 1/5
+    Epoch [16/50], Train Losses: mse: 4.0362, mae: 1.3808, huber: 0.9837, swd: 0.8221, ept: 39.8391
+    Epoch [16/50], Val Losses: mse: 6.8956, mae: 1.9022, huber: 1.4827, swd: 1.8137, ept: 69.6715
+    Epoch [16/50], Test Losses: mse: 6.0535, mae: 1.7111, huber: 1.3027, swd: 1.6123, ept: 75.0098
+      Epoch 16 composite train-obj: 0.983745
+            Val objective improved 1.4881 → 1.4827, saving checkpoint.
+    Epoch [17/50], Train Losses: mse: 3.9562, mae: 1.3641, huber: 0.9677, swd: 0.7967, ept: 40.0579
+    Epoch [17/50], Val Losses: mse: 7.1294, mae: 1.9260, huber: 1.5063, swd: 1.9002, ept: 68.8170
+    Epoch [17/50], Test Losses: mse: 6.0642, mae: 1.7261, huber: 1.3135, swd: 1.6050, ept: 74.8290
+      Epoch 17 composite train-obj: 0.967683
+            No improvement (1.5063), counter 1/5
+    Epoch [18/50], Train Losses: mse: 3.8792, mae: 1.3460, huber: 0.9519, swd: 0.7788, ept: 40.1651
+    Epoch [18/50], Val Losses: mse: 7.0792, mae: 1.9351, huber: 1.5096, swd: 1.8814, ept: 69.8549
+    Epoch [18/50], Test Losses: mse: 6.0806, mae: 1.7242, huber: 1.3097, swd: 1.6080, ept: 75.0990
+      Epoch 18 composite train-obj: 0.951908
+            No improvement (1.5096), counter 2/5
+    Epoch [19/50], Train Losses: mse: 3.8130, mae: 1.3307, huber: 0.9375, swd: 0.7566, ept: 40.1266
+    Epoch [19/50], Val Losses: mse: 6.7305, mae: 1.8746, huber: 1.4577, swd: 1.8003, ept: 70.0842
+    Epoch [19/50], Test Losses: mse: 6.0285, mae: 1.7052, huber: 1.2976, swd: 1.6165, ept: 75.3260
+      Epoch 19 composite train-obj: 0.937476
+            Val objective improved 1.4827 → 1.4577, saving checkpoint.
+    Epoch [20/50], Train Losses: mse: 3.7214, mae: 1.3107, huber: 0.9191, swd: 0.7345, ept: 40.3218
+    Epoch [20/50], Val Losses: mse: 6.9325, mae: 1.9218, huber: 1.4993, swd: 1.9011, ept: 69.1166
+    Epoch [20/50], Test Losses: mse: 6.0497, mae: 1.7213, huber: 1.3087, swd: 1.6830, ept: 74.9327
+      Epoch 20 composite train-obj: 0.919114
+            No improvement (1.4993), counter 1/5
+    Epoch [21/50], Train Losses: mse: 3.6678, mae: 1.2977, huber: 0.9072, swd: 0.7135, ept: 40.3326
+    Epoch [21/50], Val Losses: mse: 7.0435, mae: 1.9219, huber: 1.5038, swd: 1.7501, ept: 69.6472
+    Epoch [21/50], Test Losses: mse: 6.0760, mae: 1.7007, huber: 1.2949, swd: 1.5186, ept: 75.6730
+      Epoch 21 composite train-obj: 0.907176
+            No improvement (1.5038), counter 2/5
+    Epoch [22/50], Train Losses: mse: 3.6115, mae: 1.2826, huber: 0.8935, swd: 0.6936, ept: 40.3482
+    Epoch [22/50], Val Losses: mse: 6.8485, mae: 1.8941, huber: 1.4758, swd: 1.7803, ept: 70.3704
+    Epoch [22/50], Test Losses: mse: 6.0953, mae: 1.6981, huber: 1.2922, swd: 1.5447, ept: 75.6283
+      Epoch 22 composite train-obj: 0.893487
+            No improvement (1.4758), counter 3/5
+    Epoch [23/50], Train Losses: mse: 3.5598, mae: 1.2722, huber: 0.8839, swd: 0.6761, ept: 40.4442
+    Epoch [23/50], Val Losses: mse: 6.8190, mae: 1.9013, huber: 1.4806, swd: 1.7611, ept: 70.2186
+    Epoch [23/50], Test Losses: mse: 5.9084, mae: 1.6855, huber: 1.2756, swd: 1.5032, ept: 76.6946
+      Epoch 23 composite train-obj: 0.883859
+            No improvement (1.4806), counter 4/5
+    Epoch [24/50], Train Losses: mse: 3.4928, mae: 1.2565, huber: 0.8695, swd: 0.6633, ept: 40.5680
+    Epoch [24/50], Val Losses: mse: 6.8679, mae: 1.9100, huber: 1.4889, swd: 1.8462, ept: 69.7889
+    Epoch [24/50], Test Losses: mse: 5.8996, mae: 1.6753, huber: 1.2696, swd: 1.5491, ept: 76.3677
+      Epoch 24 composite train-obj: 0.869536
+    Epoch [24/50], Test Losses: mse: 6.0285, mae: 1.7052, huber: 1.2976, swd: 1.6165, ept: 75.3260
+    Best round's Test MSE: 6.0285, MAE: 1.7052, SWD: 1.6165
+    Best round's Validation MSE: 6.7305, MAE: 1.8746, SWD: 1.8003
+    Best round's Test verification MSE : 6.0285, MAE: 1.7052, SWD: 1.6165
+    Time taken: 99.35 seconds
+    
+    ==================================================
+     Running experiment with seed 20 (3/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 11.4969, mae: 2.5933, huber: 2.1410, swd: 2.4827, ept: 24.6955
+    Epoch [1/50], Val Losses: mse: 8.5918, mae: 2.2261, huber: 1.7862, swd: 2.6250, ept: 55.6954
+    Epoch [1/50], Test Losses: mse: 9.0543, mae: 2.2446, huber: 1.8052, swd: 2.6148, ept: 56.2113
+      Epoch 1 composite train-obj: 2.140970
+            Val objective improved inf → 1.7862, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 8.4510, mae: 2.1648, huber: 1.7255, swd: 1.8851, ept: 32.3693
+    Epoch [2/50], Val Losses: mse: 8.0020, mae: 2.1011, huber: 1.6685, swd: 2.0244, ept: 59.8579
+    Epoch [2/50], Test Losses: mse: 8.3113, mae: 2.1129, huber: 1.6815, swd: 2.1453, ept: 61.6316
+      Epoch 2 composite train-obj: 1.725531
+            Val objective improved 1.7862 → 1.6685, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 7.4064, mae: 2.0033, huber: 1.5709, swd: 1.6165, ept: 34.2811
+    Epoch [3/50], Val Losses: mse: 7.4187, mae: 2.0280, huber: 1.5975, swd: 1.8763, ept: 62.5933
+    Epoch [3/50], Test Losses: mse: 7.8646, mae: 2.0546, huber: 1.6230, swd: 1.9257, ept: 63.7573
+      Epoch 3 composite train-obj: 1.570855
+            Val objective improved 1.6685 → 1.5975, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 6.7449, mae: 1.8926, huber: 1.4659, swd: 1.4473, ept: 35.5070
+    Epoch [4/50], Val Losses: mse: 7.7958, mae: 2.0786, huber: 1.6471, swd: 2.2082, ept: 62.3233
+    Epoch [4/50], Test Losses: mse: 7.6313, mae: 2.0077, huber: 1.5796, swd: 2.1020, ept: 65.5418
+      Epoch 4 composite train-obj: 1.465851
+            No improvement (1.6471), counter 1/5
+    Epoch [5/50], Train Losses: mse: 6.2655, mae: 1.8130, huber: 1.3898, swd: 1.3500, ept: 36.4561
+    Epoch [5/50], Val Losses: mse: 7.6709, mae: 2.0335, huber: 1.6058, swd: 1.8473, ept: 64.3279
+    Epoch [5/50], Test Losses: mse: 7.3362, mae: 1.9456, huber: 1.5209, swd: 1.6714, ept: 67.6936
+      Epoch 5 composite train-obj: 1.389767
+            No improvement (1.6058), counter 2/5
+    Epoch [6/50], Train Losses: mse: 5.8901, mae: 1.7466, huber: 1.3269, swd: 1.2439, ept: 37.1910
+    Epoch [6/50], Val Losses: mse: 7.6415, mae: 2.0095, huber: 1.5838, swd: 1.8860, ept: 66.0058
+    Epoch [6/50], Test Losses: mse: 7.2616, mae: 1.9145, huber: 1.4945, swd: 1.7315, ept: 68.5057
+      Epoch 6 composite train-obj: 1.326857
+            Val objective improved 1.5975 → 1.5838, saving checkpoint.
+    Epoch [7/50], Train Losses: mse: 5.5536, mae: 1.6847, huber: 1.2683, swd: 1.1580, ept: 37.7338
+    Epoch [7/50], Val Losses: mse: 7.3695, mae: 2.0039, huber: 1.5764, swd: 1.8204, ept: 65.6978
+    Epoch [7/50], Test Losses: mse: 6.7255, mae: 1.8536, huber: 1.4338, swd: 1.6452, ept: 70.4511
+      Epoch 7 composite train-obj: 1.268281
+            Val objective improved 1.5838 → 1.5764, saving checkpoint.
+    Epoch [8/50], Train Losses: mse: 5.3276, mae: 1.6459, huber: 1.2311, swd: 1.1058, ept: 38.0576
+    Epoch [8/50], Val Losses: mse: 7.1468, mae: 1.9381, huber: 1.5156, swd: 1.7969, ept: 67.2301
+    Epoch [8/50], Test Losses: mse: 6.7206, mae: 1.8406, huber: 1.4226, swd: 1.7191, ept: 70.3254
+      Epoch 8 composite train-obj: 1.231084
+            Val objective improved 1.5764 → 1.5156, saving checkpoint.
+    Epoch [9/50], Train Losses: mse: 5.0687, mae: 1.5922, huber: 1.1812, swd: 1.0346, ept: 38.5044
+    Epoch [9/50], Val Losses: mse: 6.8143, mae: 1.9143, huber: 1.4929, swd: 1.6797, ept: 68.0019
+    Epoch [9/50], Test Losses: mse: 6.3093, mae: 1.7962, huber: 1.3794, swd: 1.6174, ept: 71.9037
+      Epoch 9 composite train-obj: 1.181231
+            Val objective improved 1.5156 → 1.4929, saving checkpoint.
+    Epoch [10/50], Train Losses: mse: 4.9021, mae: 1.5593, huber: 1.1507, swd: 0.9887, ept: 38.7726
+    Epoch [10/50], Val Losses: mse: 6.9860, mae: 1.9205, huber: 1.4989, swd: 1.7270, ept: 68.2629
+    Epoch [10/50], Test Losses: mse: 6.5711, mae: 1.8148, huber: 1.3987, swd: 1.6868, ept: 72.2939
+      Epoch 10 composite train-obj: 1.150678
+            No improvement (1.4989), counter 1/5
+    Epoch [11/50], Train Losses: mse: 4.7314, mae: 1.5240, huber: 1.1177, swd: 0.9427, ept: 39.0911
+    Epoch [11/50], Val Losses: mse: 6.8779, mae: 1.9263, huber: 1.5017, swd: 1.6005, ept: 68.4518
+    Epoch [11/50], Test Losses: mse: 6.3387, mae: 1.7672, huber: 1.3548, swd: 1.4373, ept: 72.5662
+      Epoch 11 composite train-obj: 1.117716
+            No improvement (1.5017), counter 2/5
+    Epoch [12/50], Train Losses: mse: 4.5787, mae: 1.4948, huber: 1.0899, swd: 0.9096, ept: 39.3824
+    Epoch [12/50], Val Losses: mse: 6.7416, mae: 1.9021, huber: 1.4777, swd: 1.6506, ept: 68.9410
+    Epoch [12/50], Test Losses: mse: 6.1718, mae: 1.7569, huber: 1.3414, swd: 1.5010, ept: 73.8306
+      Epoch 12 composite train-obj: 1.089903
+            Val objective improved 1.4929 → 1.4777, saving checkpoint.
+    Epoch [13/50], Train Losses: mse: 4.4294, mae: 1.4635, huber: 1.0606, swd: 0.8638, ept: 39.4833
+    Epoch [13/50], Val Losses: mse: 6.5413, mae: 1.8678, huber: 1.4462, swd: 1.6277, ept: 69.9313
+    Epoch [13/50], Test Losses: mse: 6.1669, mae: 1.7420, huber: 1.3298, swd: 1.5730, ept: 74.1517
+      Epoch 13 composite train-obj: 1.060553
+            Val objective improved 1.4777 → 1.4462, saving checkpoint.
+    Epoch [14/50], Train Losses: mse: 4.3082, mae: 1.4408, huber: 1.0389, swd: 0.8325, ept: 39.6787
+    Epoch [14/50], Val Losses: mse: 6.6080, mae: 1.8754, huber: 1.4518, swd: 1.5522, ept: 69.9991
+    Epoch [14/50], Test Losses: mse: 6.1663, mae: 1.7402, huber: 1.3257, swd: 1.4416, ept: 73.9623
+      Epoch 14 composite train-obj: 1.038884
+            No improvement (1.4518), counter 1/5
+    Epoch [15/50], Train Losses: mse: 4.2139, mae: 1.4206, huber: 1.0198, swd: 0.8062, ept: 39.7442
+    Epoch [15/50], Val Losses: mse: 6.5739, mae: 1.8652, huber: 1.4485, swd: 1.4698, ept: 69.2536
+    Epoch [15/50], Test Losses: mse: 6.0098, mae: 1.7098, huber: 1.3024, swd: 1.3837, ept: 74.7149
+      Epoch 15 composite train-obj: 1.019775
+            No improvement (1.4485), counter 2/5
+    Epoch [16/50], Train Losses: mse: 4.0898, mae: 1.3915, huber: 0.9939, swd: 0.7717, ept: 39.9182
+    Epoch [16/50], Val Losses: mse: 6.4232, mae: 1.8403, huber: 1.4219, swd: 1.5041, ept: 70.0711
+    Epoch [16/50], Test Losses: mse: 5.8608, mae: 1.6863, huber: 1.2781, swd: 1.4431, ept: 75.4688
+      Epoch 16 composite train-obj: 0.993892
+            Val objective improved 1.4462 → 1.4219, saving checkpoint.
+    Epoch [17/50], Train Losses: mse: 3.9800, mae: 1.3670, huber: 0.9713, swd: 0.7382, ept: 40.0781
+    Epoch [17/50], Val Losses: mse: 6.5446, mae: 1.8407, huber: 1.4247, swd: 1.4736, ept: 69.7705
+    Epoch [17/50], Test Losses: mse: 5.8680, mae: 1.6801, huber: 1.2738, swd: 1.3901, ept: 75.3184
+      Epoch 17 composite train-obj: 0.971287
+            No improvement (1.4247), counter 1/5
+    Epoch [18/50], Train Losses: mse: 3.9001, mae: 1.3477, huber: 0.9539, swd: 0.7177, ept: 40.1644
+    Epoch [18/50], Val Losses: mse: 6.3483, mae: 1.8266, huber: 1.4084, swd: 1.4562, ept: 70.9286
+    Epoch [18/50], Test Losses: mse: 5.7902, mae: 1.6718, huber: 1.2643, swd: 1.3826, ept: 75.5885
+      Epoch 18 composite train-obj: 0.953850
+            Val objective improved 1.4219 → 1.4084, saving checkpoint.
+    Epoch [19/50], Train Losses: mse: 3.8285, mae: 1.3350, huber: 0.9413, swd: 0.6986, ept: 40.2633
+    Epoch [19/50], Val Losses: mse: 6.4884, mae: 1.8499, huber: 1.4312, swd: 1.4271, ept: 70.6025
+    Epoch [19/50], Test Losses: mse: 5.7749, mae: 1.6718, huber: 1.2642, swd: 1.3495, ept: 76.1368
+      Epoch 19 composite train-obj: 0.941324
+            No improvement (1.4312), counter 1/5
+    Epoch [20/50], Train Losses: mse: 3.7676, mae: 1.3199, huber: 0.9275, swd: 0.6782, ept: 40.2521
+    Epoch [20/50], Val Losses: mse: 6.3860, mae: 1.8284, huber: 1.4114, swd: 1.4153, ept: 70.7234
+    Epoch [20/50], Test Losses: mse: 5.7616, mae: 1.6552, huber: 1.2494, swd: 1.3338, ept: 76.0433
+      Epoch 20 composite train-obj: 0.927542
+            No improvement (1.4114), counter 2/5
+    Epoch [21/50], Train Losses: mse: 3.6775, mae: 1.3001, huber: 0.9093, swd: 0.6553, ept: 40.3772
+    Epoch [21/50], Val Losses: mse: 6.3487, mae: 1.8113, huber: 1.3968, swd: 1.3855, ept: 71.0201
+    Epoch [21/50], Test Losses: mse: 5.7113, mae: 1.6367, huber: 1.2348, swd: 1.3084, ept: 76.4224
+      Epoch 21 composite train-obj: 0.909321
+            Val objective improved 1.4084 → 1.3968, saving checkpoint.
+    Epoch [22/50], Train Losses: mse: 3.6300, mae: 1.2894, huber: 0.8991, swd: 0.6337, ept: 40.4392
+    Epoch [22/50], Val Losses: mse: 6.3965, mae: 1.8375, huber: 1.4183, swd: 1.4524, ept: 71.2111
+    Epoch [22/50], Test Losses: mse: 5.7407, mae: 1.6466, huber: 1.2424, swd: 1.2970, ept: 76.5895
+      Epoch 22 composite train-obj: 0.899144
+            No improvement (1.4183), counter 1/5
+    Epoch [23/50], Train Losses: mse: 3.5854, mae: 1.2776, huber: 0.8885, swd: 0.6270, ept: 40.4112
+    Epoch [23/50], Val Losses: mse: 6.3847, mae: 1.8250, huber: 1.4079, swd: 1.4003, ept: 70.8353
+    Epoch [23/50], Test Losses: mse: 5.7041, mae: 1.6436, huber: 1.2386, swd: 1.2886, ept: 76.2868
+      Epoch 23 composite train-obj: 0.888451
+            No improvement (1.4079), counter 2/5
+    Epoch [24/50], Train Losses: mse: 3.5238, mae: 1.2610, huber: 0.8739, swd: 0.6119, ept: 40.5083
+    Epoch [24/50], Val Losses: mse: 6.2933, mae: 1.8184, huber: 1.3994, swd: 1.4291, ept: 71.2987
+    Epoch [24/50], Test Losses: mse: 5.6304, mae: 1.6169, huber: 1.2164, swd: 1.3351, ept: 76.9050
+      Epoch 24 composite train-obj: 0.873876
+            No improvement (1.3994), counter 3/5
+    Epoch [25/50], Train Losses: mse: 3.4779, mae: 1.2514, huber: 0.8650, swd: 0.5946, ept: 40.5469
+    Epoch [25/50], Val Losses: mse: 6.5350, mae: 1.8511, huber: 1.4336, swd: 1.4515, ept: 70.9033
+    Epoch [25/50], Test Losses: mse: 5.7776, mae: 1.6387, huber: 1.2372, swd: 1.3083, ept: 76.7785
+      Epoch 25 composite train-obj: 0.864953
+            No improvement (1.4336), counter 4/5
+    Epoch [26/50], Train Losses: mse: 3.4217, mae: 1.2396, huber: 0.8538, swd: 0.5822, ept: 40.6856
+    Epoch [26/50], Val Losses: mse: 6.3565, mae: 1.8307, huber: 1.4134, swd: 1.5260, ept: 71.0985
+    Epoch [26/50], Test Losses: mse: 5.5847, mae: 1.6198, huber: 1.2169, swd: 1.3467, ept: 76.7452
+      Epoch 26 composite train-obj: 0.853809
+    Epoch [26/50], Test Losses: mse: 5.7113, mae: 1.6367, huber: 1.2348, swd: 1.3084, ept: 76.4224
+    Best round's Test MSE: 5.7113, MAE: 1.6367, SWD: 1.3084
+    Best round's Validation MSE: 6.3487, MAE: 1.8113, SWD: 1.3855
+    Best round's Test verification MSE : 5.7113, MAE: 1.6367, SWD: 1.3084
+    Time taken: 110.65 seconds
+    
+    ==================================================
+    Experiment Summary (PatchTST_lorenz96_seq336_pred96_20250512_2212)
+    ==================================================
+    Number of runs: 3
+    Seeds: [1955, 7, 20]
+    
+    Test Performance at Best Validation (mean ± std):
+      mse: 5.7456 ± 0.2183
+      mae: 1.6518 ± 0.0389
+      huber: 1.2477 ± 0.0366
+      swd: 1.4505 ± 0.1269
+      ept: 76.2243 ± 0.6674
+      count: 12.0000 ± 0.0000
+    
+    Corresponding Validation Performance (mean ± std):
+      mse: 6.5693 ± 0.1614
+      mae: 1.8467 ± 0.0264
+      huber: 1.4300 ± 0.0252
+      swd: 1.6640 ± 0.1970
+      ept: 70.8409 ± 0.5592
+      count: 12.0000 ± 0.0000
+    ==================================================
+    Three seeds Time taken: 344.13 seconds
+    
+    Experiment complete: PatchTST_lorenz96_seq336_pred96_20250512_2212
+    Model: PatchTST
+    Dataset: lorenz96
+    Sequence Length: 336
+    Prediction Length: 96
+    Seeds: [1955, 7, 20]
+    
+
+#### pred=196
+
+
+```python
+utils.reload_modules([utils])
+cfg = train_config.FlatPatchTSTConfig(
+    seq_len=336,
+    pred_len=196,
+    channels=data_mgr.datasets['lorenz96']['channels'],
+    enc_in=data_mgr.datasets['lorenz96']['channels'],
+    dec_in=data_mgr.datasets['lorenz96']['channels'],
+    c_out=data_mgr.datasets['lorenz96']['channels'],
+    batch_size=128,
+    learning_rate=9e-4,
+    seeds=[1955, 7, 20],
+    epochs=50,
+    task_name='long_term_forecast',
+    factor=3,
+)
+exp = execute_model_evaluation('lorenz96', cfg, data_mgr, scale=False)
+```
+
+    Reloading modules...
+      Reloaded: utils
+    Module reload complete.
+    Shape of training data: torch.Size([13300, 6])
+    Shape of validation data: torch.Size([1900, 6])
+    Shape of testing data: torch.Size([3800, 6])
+    global_std.shape: torch.Size([6])
+    Global Std for lorenz96: tensor([3.6750, 3.6678, 3.7240, 3.7347, 3.8038, 3.5588], device='cuda:0')
+    Train set sample shapes: torch.Size([336, 6]), torch.Size([196, 6])
+    Validation set sample shapes: torch.Size([336, 6]), torch.Size([196, 6])
+    Test set data shapes: torch.Size([3800, 6]), torch.Size([3800, 6])
+    Number of batches in train_loader: 100
+    Batch 0: Data shape torch.Size([128, 336, 6]), Target shape torch.Size([128, 196, 6])
+    
+    ==================================================
+    Data Preparation: lorenz96
+    ==================================================
+    Sequence Length: 336
+    Prediction Length: 196
+    Batch Size: 128
+    Scaling: No
+    Train Split: 0.7
+    Val Split: 0.8
+    Training Batches: 100
+    Validation Batches: 11
+    Test Batches: 26
+    ==================================================
+    
+    ==================================================
+     Running experiment with seed 1955 (1/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 13.5291, mae: 2.8860, huber: 2.4256, swd: 2.7978, ept: 24.2729
+    Epoch [1/50], Val Losses: mse: 12.1025, mae: 2.6763, huber: 2.2240, swd: 3.2336, ept: 61.0653
+    Epoch [1/50], Test Losses: mse: 12.6560, mae: 2.7462, huber: 2.2918, swd: 2.9440, ept: 58.7917
+      Epoch 1 composite train-obj: 2.425554
+            Val objective improved inf → 2.2240, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 10.7590, mae: 2.5270, huber: 2.0751, swd: 2.1864, ept: 32.7458
+    Epoch [2/50], Val Losses: mse: 11.7792, mae: 2.6398, huber: 2.1883, swd: 3.1094, ept: 67.3826
+    Epoch [2/50], Test Losses: mse: 11.5377, mae: 2.6175, huber: 2.1659, swd: 2.7043, ept: 66.9561
+      Epoch 2 composite train-obj: 2.075146
+            Val objective improved 2.2240 → 2.1883, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 9.6761, mae: 2.3672, huber: 1.9204, swd: 1.8560, ept: 35.4783
+    Epoch [3/50], Val Losses: mse: 11.6076, mae: 2.6468, huber: 2.1945, swd: 2.4309, ept: 70.4513
+    Epoch [3/50], Test Losses: mse: 11.1410, mae: 2.5502, huber: 2.1020, swd: 2.0047, ept: 72.4068
+      Epoch 3 composite train-obj: 1.920407
+            No improvement (2.1945), counter 1/5
+    Epoch [4/50], Train Losses: mse: 8.9584, mae: 2.2554, huber: 1.8129, swd: 1.6583, ept: 37.4916
+    Epoch [4/50], Val Losses: mse: 10.9880, mae: 2.5355, huber: 2.0883, swd: 2.2104, ept: 76.2082
+    Epoch [4/50], Test Losses: mse: 10.8649, mae: 2.4967, huber: 2.0515, swd: 2.0350, ept: 78.8940
+      Epoch 4 composite train-obj: 1.812950
+            Val objective improved 2.1883 → 2.0883, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 8.3897, mae: 2.1670, huber: 1.7277, swd: 1.5437, ept: 38.9021
+    Epoch [5/50], Val Losses: mse: 10.9355, mae: 2.5475, huber: 2.0996, swd: 2.2338, ept: 73.2331
+    Epoch [5/50], Test Losses: mse: 10.6658, mae: 2.4697, huber: 2.0248, swd: 2.0271, ept: 78.7882
+      Epoch 5 composite train-obj: 1.727746
+            No improvement (2.0996), counter 1/5
+    Epoch [6/50], Train Losses: mse: 7.8967, mae: 2.0885, huber: 1.6519, swd: 1.4199, ept: 40.1964
+    Epoch [6/50], Val Losses: mse: 10.6357, mae: 2.5013, huber: 2.0548, swd: 2.0712, ept: 77.4882
+    Epoch [6/50], Test Losses: mse: 10.5502, mae: 2.4412, huber: 1.9979, swd: 1.9289, ept: 82.7473
+      Epoch 6 composite train-obj: 1.651924
+            Val objective improved 2.0883 → 2.0548, saving checkpoint.
+    Epoch [7/50], Train Losses: mse: 7.4911, mae: 2.0212, huber: 1.5874, swd: 1.3436, ept: 41.2379
+    Epoch [7/50], Val Losses: mse: 10.8581, mae: 2.5356, huber: 2.0890, swd: 2.0086, ept: 78.4150
+    Epoch [7/50], Test Losses: mse: 10.3191, mae: 2.3992, huber: 1.9583, swd: 1.9242, ept: 87.4859
+      Epoch 7 composite train-obj: 1.587413
+            No improvement (2.0890), counter 1/5
+    Epoch [8/50], Train Losses: mse: 7.1292, mae: 1.9609, huber: 1.5296, swd: 1.2691, ept: 41.9898
+    Epoch [8/50], Val Losses: mse: 11.1493, mae: 2.5547, huber: 2.1093, swd: 1.9012, ept: 75.1554
+    Epoch [8/50], Test Losses: mse: 10.4280, mae: 2.4026, huber: 1.9614, swd: 1.7280, ept: 87.5131
+      Epoch 8 composite train-obj: 1.529574
+            No improvement (2.1093), counter 2/5
+    Epoch [9/50], Train Losses: mse: 6.8594, mae: 1.9165, huber: 1.4866, swd: 1.2090, ept: 42.6690
+    Epoch [9/50], Val Losses: mse: 10.6828, mae: 2.5039, huber: 2.0563, swd: 1.9898, ept: 81.5014
+    Epoch [9/50], Test Losses: mse: 10.2803, mae: 2.3836, huber: 1.9432, swd: 1.9137, ept: 90.6775
+      Epoch 9 composite train-obj: 1.486599
+            No improvement (2.0563), counter 3/5
+    Epoch [10/50], Train Losses: mse: 6.5820, mae: 1.8697, huber: 1.4420, swd: 1.1564, ept: 43.0075
+    Epoch [10/50], Val Losses: mse: 10.7737, mae: 2.5355, huber: 2.0875, swd: 1.9459, ept: 81.1331
+    Epoch [10/50], Test Losses: mse: 9.9063, mae: 2.3390, huber: 1.8994, swd: 1.7923, ept: 92.4931
+      Epoch 10 composite train-obj: 1.442016
+            No improvement (2.0875), counter 4/5
+    Epoch [11/50], Train Losses: mse: 6.3522, mae: 1.8318, huber: 1.4054, swd: 1.1024, ept: 43.5514
+    Epoch [11/50], Val Losses: mse: 10.3963, mae: 2.4760, huber: 2.0305, swd: 1.8584, ept: 80.6363
+    Epoch [11/50], Test Losses: mse: 10.0716, mae: 2.3461, huber: 1.9081, swd: 1.7055, ept: 92.1143
+      Epoch 11 composite train-obj: 1.405443
+            Val objective improved 2.0548 → 2.0305, saving checkpoint.
+    Epoch [12/50], Train Losses: mse: 6.1565, mae: 1.7976, huber: 1.3729, swd: 1.0538, ept: 43.9472
+    Epoch [12/50], Val Losses: mse: 10.5398, mae: 2.4924, huber: 2.0460, swd: 1.7522, ept: 83.1284
+    Epoch [12/50], Test Losses: mse: 9.9840, mae: 2.3425, huber: 1.9029, swd: 1.6903, ept: 94.0871
+      Epoch 12 composite train-obj: 1.372896
+            No improvement (2.0460), counter 1/5
+    Epoch [13/50], Train Losses: mse: 5.9680, mae: 1.7632, huber: 1.3401, swd: 1.0167, ept: 44.1787
+    Epoch [13/50], Val Losses: mse: 10.4406, mae: 2.4741, huber: 2.0283, swd: 2.0751, ept: 82.9466
+    Epoch [13/50], Test Losses: mse: 10.0825, mae: 2.3468, huber: 1.9071, swd: 1.8952, ept: 95.3793
+      Epoch 13 composite train-obj: 1.340115
+            Val objective improved 2.0305 → 2.0283, saving checkpoint.
+    Epoch [14/50], Train Losses: mse: 5.8139, mae: 1.7357, huber: 1.3139, swd: 0.9769, ept: 44.4381
+    Epoch [14/50], Val Losses: mse: 10.3877, mae: 2.4709, huber: 2.0239, swd: 1.9361, ept: 84.9580
+    Epoch [14/50], Test Losses: mse: 9.9588, mae: 2.3323, huber: 1.8934, swd: 1.9075, ept: 96.7486
+      Epoch 14 composite train-obj: 1.313882
+            Val objective improved 2.0283 → 2.0239, saving checkpoint.
+    Epoch [15/50], Train Losses: mse: 5.6623, mae: 1.7111, huber: 1.2899, swd: 0.9414, ept: 44.7511
+    Epoch [15/50], Val Losses: mse: 10.4191, mae: 2.4673, huber: 2.0216, swd: 1.7997, ept: 83.2441
+    Epoch [15/50], Test Losses: mse: 10.0804, mae: 2.3379, huber: 1.8986, swd: 1.7332, ept: 96.6871
+      Epoch 15 composite train-obj: 1.289862
+            Val objective improved 2.0239 → 2.0216, saving checkpoint.
+    Epoch [16/50], Train Losses: mse: 5.5339, mae: 1.6870, huber: 1.2672, swd: 0.9146, ept: 44.8986
+    Epoch [16/50], Val Losses: mse: 10.3257, mae: 2.4566, huber: 2.0126, swd: 1.8631, ept: 84.0733
+    Epoch [16/50], Test Losses: mse: 10.2567, mae: 2.3545, huber: 1.9167, swd: 1.7644, ept: 96.0541
+      Epoch 16 composite train-obj: 1.267249
+            Val objective improved 2.0216 → 2.0126, saving checkpoint.
+    Epoch [17/50], Train Losses: mse: 5.4187, mae: 1.6650, huber: 1.2462, swd: 0.8883, ept: 45.1132
+    Epoch [17/50], Val Losses: mse: 10.5919, mae: 2.4888, huber: 2.0434, swd: 1.6117, ept: 83.3965
+    Epoch [17/50], Test Losses: mse: 10.1611, mae: 2.3313, huber: 1.8942, swd: 1.4929, ept: 97.6270
+      Epoch 17 composite train-obj: 1.246204
+            No improvement (2.0434), counter 1/5
+    Epoch [18/50], Train Losses: mse: 5.2992, mae: 1.6421, huber: 1.2246, swd: 0.8582, ept: 45.1635
+    Epoch [18/50], Val Losses: mse: 10.2611, mae: 2.4455, huber: 2.0010, swd: 1.6687, ept: 82.4419
+    Epoch [18/50], Test Losses: mse: 10.0747, mae: 2.3227, huber: 1.8858, swd: 1.5213, ept: 98.0819
+      Epoch 18 composite train-obj: 1.224619
+            Val objective improved 2.0126 → 2.0010, saving checkpoint.
+    Epoch [19/50], Train Losses: mse: 5.2218, mae: 1.6293, huber: 1.2123, swd: 0.8461, ept: 45.3685
+    Epoch [19/50], Val Losses: mse: 10.5483, mae: 2.4813, huber: 2.0356, swd: 1.7526, ept: 82.1725
+    Epoch [19/50], Test Losses: mse: 9.9263, mae: 2.3029, huber: 1.8665, swd: 1.5720, ept: 99.6096
+      Epoch 19 composite train-obj: 1.212265
+            No improvement (2.0356), counter 1/5
+    Epoch [20/50], Train Losses: mse: 5.1141, mae: 1.6067, huber: 1.1911, swd: 0.8222, ept: 45.4315
+    Epoch [20/50], Val Losses: mse: 10.3093, mae: 2.4449, huber: 2.0008, swd: 1.7817, ept: 85.2012
+    Epoch [20/50], Test Losses: mse: 10.0448, mae: 2.3163, huber: 1.8796, swd: 1.6498, ept: 99.8705
+      Epoch 20 composite train-obj: 1.191138
+            Val objective improved 2.0010 → 2.0008, saving checkpoint.
+    Epoch [21/50], Train Losses: mse: 5.0189, mae: 1.5895, huber: 1.1749, swd: 0.8017, ept: 45.6023
+    Epoch [21/50], Val Losses: mse: 10.1693, mae: 2.4273, huber: 1.9835, swd: 1.7927, ept: 86.1483
+    Epoch [21/50], Test Losses: mse: 10.0672, mae: 2.3103, huber: 1.8755, swd: 1.5862, ept: 99.2514
+      Epoch 21 composite train-obj: 1.174891
+            Val objective improved 2.0008 → 1.9835, saving checkpoint.
+    Epoch [22/50], Train Losses: mse: 4.9580, mae: 1.5786, huber: 1.1643, swd: 0.7850, ept: 45.5493
+    Epoch [22/50], Val Losses: mse: 10.2297, mae: 2.4290, huber: 1.9852, swd: 1.8576, ept: 85.3966
+    Epoch [22/50], Test Losses: mse: 10.0548, mae: 2.3131, huber: 1.8774, swd: 1.6403, ept: 99.6458
+      Epoch 22 composite train-obj: 1.164313
+            No improvement (1.9852), counter 1/5
+    Epoch [23/50], Train Losses: mse: 4.8852, mae: 1.5633, huber: 1.1500, swd: 0.7685, ept: 45.6561
+    Epoch [23/50], Val Losses: mse: 10.1595, mae: 2.4256, huber: 1.9811, swd: 1.6275, ept: 84.6037
+    Epoch [23/50], Test Losses: mse: 10.0742, mae: 2.3108, huber: 1.8749, swd: 1.4605, ept: 99.8125
+      Epoch 23 composite train-obj: 1.149996
+            Val objective improved 1.9835 → 1.9811, saving checkpoint.
+    Epoch [24/50], Train Losses: mse: 4.8248, mae: 1.5508, huber: 1.1382, swd: 0.7547, ept: 45.7523
+    Epoch [24/50], Val Losses: mse: 10.2501, mae: 2.4375, huber: 1.9930, swd: 1.6935, ept: 84.6594
+    Epoch [24/50], Test Losses: mse: 10.0848, mae: 2.3079, huber: 1.8724, swd: 1.5397, ept: 100.6243
+      Epoch 24 composite train-obj: 1.138159
+            No improvement (1.9930), counter 1/5
+    Epoch [25/50], Train Losses: mse: 4.7552, mae: 1.5369, huber: 1.1252, swd: 0.7419, ept: 46.0164
+    Epoch [25/50], Val Losses: mse: 10.3660, mae: 2.4430, huber: 1.9999, swd: 1.7138, ept: 84.9196
+    Epoch [25/50], Test Losses: mse: 10.1759, mae: 2.3114, huber: 1.8765, swd: 1.5043, ept: 100.5020
+      Epoch 25 composite train-obj: 1.125214
+            No improvement (1.9999), counter 2/5
+    Epoch [26/50], Train Losses: mse: 4.7010, mae: 1.5276, huber: 1.1162, swd: 0.7278, ept: 45.9116
+    Epoch [26/50], Val Losses: mse: 10.2604, mae: 2.4298, huber: 1.9852, swd: 1.6278, ept: 85.3061
+    Epoch [26/50], Test Losses: mse: 10.0672, mae: 2.3004, huber: 1.8647, swd: 1.4294, ept: 101.3974
+      Epoch 26 composite train-obj: 1.116205
+            No improvement (1.9852), counter 3/5
+    Epoch [27/50], Train Losses: mse: 4.6346, mae: 1.5131, huber: 1.1026, swd: 0.7128, ept: 46.3462
+    Epoch [27/50], Val Losses: mse: 10.1462, mae: 2.4188, huber: 1.9741, swd: 1.7261, ept: 87.2353
+    Epoch [27/50], Test Losses: mse: 10.1035, mae: 2.3096, huber: 1.8745, swd: 1.5976, ept: 101.5954
+      Epoch 27 composite train-obj: 1.102612
+            Val objective improved 1.9811 → 1.9741, saving checkpoint.
+    Epoch [28/50], Train Losses: mse: 4.5936, mae: 1.5046, huber: 1.0945, swd: 0.7007, ept: 46.2312
+    Epoch [28/50], Val Losses: mse: 10.3201, mae: 2.4349, huber: 1.9914, swd: 1.7057, ept: 84.7292
+    Epoch [28/50], Test Losses: mse: 10.0886, mae: 2.2982, huber: 1.8647, swd: 1.4906, ept: 101.9952
+      Epoch 28 composite train-obj: 1.094504
+            No improvement (1.9914), counter 1/5
+    Epoch [29/50], Train Losses: mse: 4.5272, mae: 1.4920, huber: 1.0826, swd: 0.6879, ept: 46.1979
+    Epoch [29/50], Val Losses: mse: 10.3341, mae: 2.4459, huber: 2.0013, swd: 1.7956, ept: 84.8146
+    Epoch [29/50], Test Losses: mse: 10.0726, mae: 2.2952, huber: 1.8609, swd: 1.5099, ept: 102.5452
+      Epoch 29 composite train-obj: 1.082606
+            No improvement (2.0013), counter 2/5
+    Epoch [30/50], Train Losses: mse: 4.4812, mae: 1.4821, huber: 1.0734, swd: 0.6774, ept: 46.3117
+    Epoch [30/50], Val Losses: mse: 10.3853, mae: 2.4457, huber: 2.0018, swd: 1.7377, ept: 83.9687
+    Epoch [30/50], Test Losses: mse: 10.1609, mae: 2.3048, huber: 1.8703, swd: 1.5253, ept: 101.8800
+      Epoch 30 composite train-obj: 1.073397
+            No improvement (2.0018), counter 3/5
+    Epoch [31/50], Train Losses: mse: 4.4469, mae: 1.4740, huber: 1.0660, swd: 0.6697, ept: 46.2418
+    Epoch [31/50], Val Losses: mse: 10.3228, mae: 2.4417, huber: 1.9984, swd: 1.7480, ept: 83.2562
+    Epoch [31/50], Test Losses: mse: 10.1891, mae: 2.3069, huber: 1.8728, swd: 1.5513, ept: 102.4389
+      Epoch 31 composite train-obj: 1.065953
+            No improvement (1.9984), counter 4/5
+    Epoch [32/50], Train Losses: mse: 4.4089, mae: 1.4667, huber: 1.0592, swd: 0.6651, ept: 46.3125
+    Epoch [32/50], Val Losses: mse: 10.3950, mae: 2.4494, huber: 2.0052, swd: 1.8074, ept: 85.4848
+    Epoch [32/50], Test Losses: mse: 9.9798, mae: 2.2897, huber: 1.8544, swd: 1.6244, ept: 103.4506
+      Epoch 32 composite train-obj: 1.059158
+    Epoch [32/50], Test Losses: mse: 10.1035, mae: 2.3096, huber: 1.8745, swd: 1.5976, ept: 101.5954
+    Best round's Test MSE: 10.1035, MAE: 2.3096, SWD: 1.5976
+    Best round's Validation MSE: 10.1462, MAE: 2.4188, SWD: 1.7261
+    Best round's Test verification MSE : 10.1035, MAE: 2.3096, SWD: 1.5976
+    Time taken: 123.84 seconds
+    
+    ==================================================
+     Running experiment with seed 7 (2/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 13.4318, mae: 2.8756, huber: 2.4154, swd: 2.7845, ept: 24.5291
+    Epoch [1/50], Val Losses: mse: 12.2599, mae: 2.7009, huber: 2.2483, swd: 3.4226, ept: 63.0244
+    Epoch [1/50], Test Losses: mse: 12.1163, mae: 2.6907, huber: 2.2378, swd: 2.7081, ept: 61.2133
+      Epoch 1 composite train-obj: 2.415352
+            Val objective improved inf → 2.2483, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 10.6177, mae: 2.5045, huber: 2.0532, swd: 2.1831, ept: 32.8707
+    Epoch [2/50], Val Losses: mse: 11.4011, mae: 2.5890, huber: 2.1390, swd: 2.8123, ept: 67.7339
+    Epoch [2/50], Test Losses: mse: 11.6512, mae: 2.6094, huber: 2.1592, swd: 2.3756, ept: 68.8120
+      Epoch 2 composite train-obj: 2.053218
+            Val objective improved 2.2483 → 2.1390, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 9.5978, mae: 2.3524, huber: 1.9063, swd: 1.8479, ept: 35.8353
+    Epoch [3/50], Val Losses: mse: 11.2412, mae: 2.5862, huber: 2.1369, swd: 2.5266, ept: 70.4671
+    Epoch [3/50], Test Losses: mse: 10.9358, mae: 2.5200, huber: 2.0719, swd: 2.0513, ept: 73.2670
+      Epoch 3 composite train-obj: 1.906269
+            Val objective improved 2.1390 → 2.1369, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 8.9128, mae: 2.2479, huber: 1.8056, swd: 1.6673, ept: 37.6204
+    Epoch [4/50], Val Losses: mse: 10.8863, mae: 2.5352, huber: 2.0890, swd: 2.3151, ept: 72.4723
+    Epoch [4/50], Test Losses: mse: 10.7240, mae: 2.4772, huber: 2.0327, swd: 1.9659, ept: 78.8454
+      Epoch 4 composite train-obj: 1.805628
+            Val objective improved 2.1369 → 2.0890, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 8.3524, mae: 2.1596, huber: 1.7208, swd: 1.5425, ept: 39.0741
+    Epoch [5/50], Val Losses: mse: 10.5411, mae: 2.5036, huber: 2.0559, swd: 2.5141, ept: 75.1961
+    Epoch [5/50], Test Losses: mse: 10.4368, mae: 2.4388, huber: 1.9948, swd: 2.1728, ept: 80.6203
+      Epoch 5 composite train-obj: 1.720771
+            Val objective improved 2.0890 → 2.0559, saving checkpoint.
+    Epoch [6/50], Train Losses: mse: 7.9004, mae: 2.0879, huber: 1.6516, swd: 1.4276, ept: 40.1897
+    Epoch [6/50], Val Losses: mse: 10.8384, mae: 2.5299, huber: 2.0831, swd: 2.3086, ept: 74.8751
+    Epoch [6/50], Test Losses: mse: 10.6048, mae: 2.4461, huber: 2.0035, swd: 1.9605, ept: 83.0492
+      Epoch 6 composite train-obj: 1.651621
+            No improvement (2.0831), counter 1/5
+    Epoch [7/50], Train Losses: mse: 7.5053, mae: 2.0227, huber: 1.5892, swd: 1.3588, ept: 41.2088
+    Epoch [7/50], Val Losses: mse: 10.8469, mae: 2.5447, huber: 2.0966, swd: 2.0765, ept: 75.9866
+    Epoch [7/50], Test Losses: mse: 10.5218, mae: 2.4365, huber: 1.9931, swd: 1.7356, ept: 84.9263
+      Epoch 7 composite train-obj: 1.589192
+            No improvement (2.0966), counter 2/5
+    Epoch [8/50], Train Losses: mse: 7.1752, mae: 1.9707, huber: 1.5388, swd: 1.2798, ept: 41.8188
+    Epoch [8/50], Val Losses: mse: 10.6900, mae: 2.5215, huber: 2.0726, swd: 2.1590, ept: 75.5756
+    Epoch [8/50], Test Losses: mse: 10.4399, mae: 2.4166, huber: 1.9735, swd: 1.9561, ept: 86.0700
+      Epoch 8 composite train-obj: 1.538791
+            No improvement (2.0726), counter 3/5
+    Epoch [9/50], Train Losses: mse: 6.8671, mae: 1.9172, huber: 1.4878, swd: 1.2101, ept: 42.5450
+    Epoch [9/50], Val Losses: mse: 10.6847, mae: 2.5268, huber: 2.0797, swd: 2.0184, ept: 79.5169
+    Epoch [9/50], Test Losses: mse: 10.0146, mae: 2.3526, huber: 1.9130, swd: 1.6831, ept: 90.5487
+      Epoch 9 composite train-obj: 1.487810
+            No improvement (2.0797), counter 4/5
+    Epoch [10/50], Train Losses: mse: 6.6137, mae: 1.8758, huber: 1.4480, swd: 1.1497, ept: 43.0653
+    Epoch [10/50], Val Losses: mse: 10.4540, mae: 2.4954, huber: 2.0485, swd: 1.9826, ept: 81.4607
+    Epoch [10/50], Test Losses: mse: 10.0917, mae: 2.3507, huber: 1.9112, swd: 1.6333, ept: 91.8236
+      Epoch 10 composite train-obj: 1.448018
+            Val objective improved 2.0559 → 2.0485, saving checkpoint.
+    Epoch [11/50], Train Losses: mse: 6.3550, mae: 1.8306, huber: 1.4049, swd: 1.0972, ept: 43.5692
+    Epoch [11/50], Val Losses: mse: 10.1555, mae: 2.4638, huber: 2.0171, swd: 1.8937, ept: 82.3878
+    Epoch [11/50], Test Losses: mse: 10.0734, mae: 2.3498, huber: 1.9120, swd: 1.6714, ept: 92.7345
+      Epoch 11 composite train-obj: 1.404875
+            Val objective improved 2.0485 → 2.0171, saving checkpoint.
+    Epoch [12/50], Train Losses: mse: 6.1790, mae: 1.7997, huber: 1.3752, swd: 1.0583, ept: 43.7899
+    Epoch [12/50], Val Losses: mse: 10.3637, mae: 2.4821, huber: 2.0339, swd: 1.8880, ept: 82.7418
+    Epoch [12/50], Test Losses: mse: 10.3294, mae: 2.3686, huber: 1.9293, swd: 1.6139, ept: 93.6485
+      Epoch 12 composite train-obj: 1.375185
+            No improvement (2.0339), counter 1/5
+    Epoch [13/50], Train Losses: mse: 6.0058, mae: 1.7696, huber: 1.3465, swd: 1.0221, ept: 44.2828
+    Epoch [13/50], Val Losses: mse: 10.2623, mae: 2.4761, huber: 2.0288, swd: 1.8966, ept: 82.2767
+    Epoch [13/50], Test Losses: mse: 10.0915, mae: 2.3329, huber: 1.8951, swd: 1.6726, ept: 96.3688
+      Epoch 13 composite train-obj: 1.346486
+            No improvement (2.0288), counter 2/5
+    Epoch [14/50], Train Losses: mse: 5.8694, mae: 1.7458, huber: 1.3236, swd: 0.9925, ept: 44.2807
+    Epoch [14/50], Val Losses: mse: 10.0820, mae: 2.4462, huber: 2.0003, swd: 1.8605, ept: 84.7956
+    Epoch [14/50], Test Losses: mse: 9.9646, mae: 2.3130, huber: 1.8758, swd: 1.5788, ept: 97.0279
+      Epoch 14 composite train-obj: 1.323560
+            Val objective improved 2.0171 → 2.0003, saving checkpoint.
+    Epoch [15/50], Train Losses: mse: 5.7298, mae: 1.7189, huber: 1.2983, swd: 0.9553, ept: 44.5771
+    Epoch [15/50], Val Losses: mse: 10.1078, mae: 2.4484, huber: 2.0025, swd: 2.0251, ept: 82.3567
+    Epoch [15/50], Test Losses: mse: 9.9759, mae: 2.3124, huber: 1.8761, swd: 1.6804, ept: 97.6760
+      Epoch 15 composite train-obj: 1.298255
+            No improvement (2.0025), counter 1/5
+    Epoch [16/50], Train Losses: mse: 5.5970, mae: 1.6950, huber: 1.2756, swd: 0.9306, ept: 44.8061
+    Epoch [16/50], Val Losses: mse: 10.5148, mae: 2.5015, huber: 2.0543, swd: 1.8871, ept: 83.6772
+    Epoch [16/50], Test Losses: mse: 9.8478, mae: 2.2928, huber: 1.8572, swd: 1.5856, ept: 99.2818
+      Epoch 16 composite train-obj: 1.275553
+            No improvement (2.0543), counter 2/5
+    Epoch [17/50], Train Losses: mse: 5.4903, mae: 1.6747, huber: 1.2562, swd: 0.9094, ept: 45.0095
+    Epoch [17/50], Val Losses: mse: 10.2821, mae: 2.4780, huber: 2.0311, swd: 1.8579, ept: 84.0992
+    Epoch [17/50], Test Losses: mse: 9.9469, mae: 2.3020, huber: 1.8670, swd: 1.5671, ept: 98.2863
+      Epoch 17 composite train-obj: 1.256247
+            No improvement (2.0311), counter 3/5
+    Epoch [18/50], Train Losses: mse: 5.3650, mae: 1.6518, huber: 1.2346, swd: 0.8769, ept: 45.2099
+    Epoch [18/50], Val Losses: mse: 10.1978, mae: 2.4535, huber: 2.0060, swd: 1.8360, ept: 85.7729
+    Epoch [18/50], Test Losses: mse: 10.0170, mae: 2.3073, huber: 1.8714, swd: 1.5300, ept: 99.6102
+      Epoch 18 composite train-obj: 1.234572
+            No improvement (2.0060), counter 4/5
+    Epoch [19/50], Train Losses: mse: 5.2869, mae: 1.6389, huber: 1.2219, swd: 0.8631, ept: 45.2963
+    Epoch [19/50], Val Losses: mse: 10.2757, mae: 2.4728, huber: 2.0261, swd: 1.8303, ept: 83.5327
+    Epoch [19/50], Test Losses: mse: 9.9974, mae: 2.3077, huber: 1.8711, swd: 1.4967, ept: 99.7388
+      Epoch 19 composite train-obj: 1.221916
+    Epoch [19/50], Test Losses: mse: 9.9646, mae: 2.3130, huber: 1.8758, swd: 1.5788, ept: 97.0279
+    Best round's Test MSE: 9.9646, MAE: 2.3130, SWD: 1.5788
+    Best round's Validation MSE: 10.0820, MAE: 2.4462, SWD: 1.8605
+    Best round's Test verification MSE : 9.9646, MAE: 2.3130, SWD: 1.5788
+    Time taken: 73.07 seconds
+    
+    ==================================================
+     Running experiment with seed 20 (3/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 13.4092, mae: 2.8731, huber: 2.4130, swd: 2.5382, ept: 24.8183
+    Epoch [1/50], Val Losses: mse: 12.6990, mae: 2.7427, huber: 2.2886, swd: 2.5882, ept: 61.9757
+    Epoch [1/50], Test Losses: mse: 12.5644, mae: 2.7454, huber: 2.2902, swd: 2.1064, ept: 58.4914
+      Epoch 1 composite train-obj: 2.412969
+            Val objective improved inf → 2.2886, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 10.4299, mae: 2.4821, huber: 2.0314, swd: 1.9605, ept: 33.1612
+    Epoch [2/50], Val Losses: mse: 11.7680, mae: 2.6446, huber: 2.1935, swd: 2.1569, ept: 68.1931
+    Epoch [2/50], Test Losses: mse: 11.5669, mae: 2.6021, huber: 2.1517, swd: 1.9218, ept: 67.9727
+      Epoch 2 composite train-obj: 2.031369
+            Val objective improved 2.2886 → 2.1935, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 9.4306, mae: 2.3340, huber: 1.8882, swd: 1.6974, ept: 36.0832
+    Epoch [3/50], Val Losses: mse: 11.3599, mae: 2.5768, huber: 2.1289, swd: 2.0689, ept: 69.7196
+    Epoch [3/50], Test Losses: mse: 11.2134, mae: 2.5530, huber: 2.1058, swd: 1.8150, ept: 72.1844
+      Epoch 3 composite train-obj: 1.888186
+            Val objective improved 2.1935 → 2.1289, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 8.8149, mae: 2.2388, huber: 1.7967, swd: 1.5513, ept: 37.7767
+    Epoch [4/50], Val Losses: mse: 10.9896, mae: 2.5626, huber: 2.1136, swd: 2.1790, ept: 70.2438
+    Epoch [4/50], Test Losses: mse: 10.7467, mae: 2.4890, huber: 2.0431, swd: 1.9919, ept: 76.8864
+      Epoch 4 composite train-obj: 1.796658
+            Val objective improved 2.1289 → 2.1136, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 8.2999, mae: 2.1567, huber: 1.7177, swd: 1.4382, ept: 39.0809
+    Epoch [5/50], Val Losses: mse: 10.1631, mae: 2.4447, huber: 1.9989, swd: 2.0400, ept: 76.1761
+    Epoch [5/50], Test Losses: mse: 11.1265, mae: 2.5109, huber: 2.0659, swd: 1.9523, ept: 80.2450
+      Epoch 5 composite train-obj: 1.717652
+            Val objective improved 2.1136 → 1.9989, saving checkpoint.
+    Epoch [6/50], Train Losses: mse: 7.8667, mae: 2.0866, huber: 1.6503, swd: 1.3555, ept: 40.1840
+    Epoch [6/50], Val Losses: mse: 10.6678, mae: 2.5041, huber: 2.0570, swd: 1.9459, ept: 77.2264
+    Epoch [6/50], Test Losses: mse: 10.8043, mae: 2.4667, huber: 2.0219, swd: 1.8133, ept: 83.6135
+      Epoch 6 composite train-obj: 1.650320
+            No improvement (2.0570), counter 1/5
+    Epoch [7/50], Train Losses: mse: 7.5067, mae: 2.0279, huber: 1.5940, swd: 1.2724, ept: 40.9910
+    Epoch [7/50], Val Losses: mse: 10.6039, mae: 2.5143, huber: 2.0680, swd: 2.0523, ept: 76.3860
+    Epoch [7/50], Test Losses: mse: 10.2396, mae: 2.3926, huber: 1.9512, swd: 1.7902, ept: 86.6203
+      Epoch 7 composite train-obj: 1.593954
+            No improvement (2.0680), counter 2/5
+    Epoch [8/50], Train Losses: mse: 7.2081, mae: 1.9783, huber: 1.5460, swd: 1.2127, ept: 41.6164
+    Epoch [8/50], Val Losses: mse: 10.4350, mae: 2.4819, huber: 2.0363, swd: 1.8909, ept: 76.2614
+    Epoch [8/50], Test Losses: mse: 10.3783, mae: 2.4064, huber: 1.9650, swd: 1.7763, ept: 88.3549
+      Epoch 8 composite train-obj: 1.546039
+            No improvement (2.0363), counter 3/5
+    Epoch [9/50], Train Losses: mse: 6.8961, mae: 1.9260, huber: 1.4958, swd: 1.1545, ept: 42.4180
+    Epoch [9/50], Val Losses: mse: 10.8211, mae: 2.5312, huber: 2.0833, swd: 1.6539, ept: 76.8668
+    Epoch [9/50], Test Losses: mse: 10.3156, mae: 2.3894, huber: 1.9468, swd: 1.4135, ept: 90.6180
+      Epoch 9 composite train-obj: 1.495800
+            No improvement (2.0833), counter 4/5
+    Epoch [10/50], Train Losses: mse: 6.6760, mae: 1.8873, huber: 1.4589, swd: 1.1079, ept: 42.8779
+    Epoch [10/50], Val Losses: mse: 10.3331, mae: 2.4634, huber: 2.0188, swd: 1.7338, ept: 80.7964
+    Epoch [10/50], Test Losses: mse: 10.2003, mae: 2.3695, huber: 1.9297, swd: 1.6217, ept: 91.5614
+      Epoch 10 composite train-obj: 1.458886
+    Epoch [10/50], Test Losses: mse: 11.1265, mae: 2.5109, huber: 2.0659, swd: 1.9523, ept: 80.2450
+    Best round's Test MSE: 11.1265, MAE: 2.5109, SWD: 1.9523
+    Best round's Validation MSE: 10.1631, MAE: 2.4447, SWD: 2.0400
+    Best round's Test verification MSE : 11.1265, MAE: 2.5109, SWD: 1.9523
+    Time taken: 39.41 seconds
+    
+    ==================================================
+    Experiment Summary (PatchTST_lorenz96_seq336_pred196_20250512_2218)
+    ==================================================
+    Number of runs: 3
+    Seeds: [1955, 7, 20]
+    
+    Test Performance at Best Validation (mean ± std):
+      mse: 10.3982 ± 0.5181
+      mae: 2.3778 ± 0.0941
+      huber: 1.9388 ± 0.0899
+      swd: 1.7096 ± 0.1718
+      ept: 92.9561 ± 9.1795
+      count: 11.0000 ± 0.0000
+    
+    Corresponding Validation Performance (mean ± std):
+      mse: 10.1305 ± 0.0349
+      mae: 2.4366 ± 0.0126
+      huber: 1.9911 ± 0.0120
+      swd: 1.8755 ± 0.1286
+      ept: 82.7357 ± 4.7440
+      count: 11.0000 ± 0.0000
+    ==================================================
+    Three seeds Time taken: 236.40 seconds
+    
+    Experiment complete: PatchTST_lorenz96_seq336_pred196_20250512_2218
+    Model: PatchTST
+    Dataset: lorenz96
+    Sequence Length: 336
+    Prediction Length: 196
+    Seeds: [1955, 7, 20]
+    
+
+#### pred=336
+
+##### huber
+
+
+```python
+utils.reload_modules([utils])
+cfg = train_config.FlatPatchTSTConfig(
+    seq_len=336,
+    pred_len=336,
+    channels=data_mgr.datasets['lorenz96']['channels'],
+    enc_in=data_mgr.datasets['lorenz96']['channels'],
+    dec_in=data_mgr.datasets['lorenz96']['channels'],
+    c_out=data_mgr.datasets['lorenz96']['channels'],
+    batch_size=128,
+    learning_rate=9e-4,
+    seeds=[1955, 7, 20],
+    epochs=50,
+    task_name='long_term_forecast',
+    factor=3,
+)
+exp = execute_model_evaluation('lorenz96', cfg, data_mgr, scale=False)
+```
+
+    Reloading modules...
+      Reloaded: utils
+    Module reload complete.
+    Shape of training data: torch.Size([13300, 6])
+    Shape of validation data: torch.Size([1900, 6])
+    Shape of testing data: torch.Size([3800, 6])
+    global_std.shape: torch.Size([6])
+    Global Std for lorenz96: tensor([3.6750, 3.6678, 3.7240, 3.7347, 3.8038, 3.5588], device='cuda:0')
+    Train set sample shapes: torch.Size([336, 6]), torch.Size([336, 6])
+    Validation set sample shapes: torch.Size([336, 6]), torch.Size([336, 6])
+    Test set data shapes: torch.Size([3800, 6]), torch.Size([3800, 6])
+    Number of batches in train_loader: 99
+    Batch 0: Data shape torch.Size([128, 336, 6]), Target shape torch.Size([128, 336, 6])
+    
+    ==================================================
+    Data Preparation: lorenz96
+    ==================================================
+    Sequence Length: 336
+    Prediction Length: 336
+    Batch Size: 128
+    Scaling: No
+    Train Split: 0.7
+    Val Split: 0.8
+    Training Batches: 99
+    Validation Batches: 10
+    Test Batches: 25
+    ==================================================
+    
+    ==================================================
+     Running experiment with seed 1955 (1/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 14.3741, mae: 3.0163, huber: 2.5522, swd: 2.7558, ept: 24.0885
+    Epoch [1/50], Val Losses: mse: 15.3869, mae: 3.0985, huber: 2.6363, swd: 3.7614, ept: 56.9789
+    Epoch [1/50], Test Losses: mse: 13.9544, mae: 2.9359, huber: 2.4762, swd: 2.8480, ept: 59.7526
+      Epoch 1 composite train-obj: 2.552187
+            Val objective improved inf → 2.6363, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 12.1359, mae: 2.7370, huber: 2.2789, swd: 2.3225, ept: 32.5316
+    Epoch [2/50], Val Losses: mse: 13.7459, mae: 2.9339, huber: 2.4735, swd: 4.0007, ept: 62.5474
+    Epoch [2/50], Test Losses: mse: 13.7732, mae: 2.9282, huber: 2.4681, swd: 3.2137, ept: 64.7939
+      Epoch 2 composite train-obj: 2.278886
+            Val objective improved 2.6363 → 2.4735, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 11.1478, mae: 2.5969, huber: 2.1426, swd: 2.0127, ept: 35.1053
+    Epoch [3/50], Val Losses: mse: 13.3258, mae: 2.8640, huber: 2.4065, swd: 3.1725, ept: 67.5772
+    Epoch [3/50], Test Losses: mse: 13.5780, mae: 2.8831, huber: 2.4256, swd: 2.4991, ept: 71.2309
+      Epoch 3 composite train-obj: 2.142557
+            Val objective improved 2.4735 → 2.4065, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 10.3970, mae: 2.4867, huber: 2.0356, swd: 1.7979, ept: 37.0455
+    Epoch [4/50], Val Losses: mse: 12.9291, mae: 2.8204, huber: 2.3628, swd: 2.4072, ept: 68.6597
+    Epoch [4/50], Test Losses: mse: 13.9539, mae: 2.8953, huber: 2.4389, swd: 1.7518, ept: 76.5956
+      Epoch 4 composite train-obj: 2.035590
+            Val objective improved 2.4065 → 2.3628, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 9.7628, mae: 2.3932, huber: 1.9447, swd: 1.6330, ept: 38.5810
+    Epoch [5/50], Val Losses: mse: 13.0402, mae: 2.8444, huber: 2.3865, swd: 2.2546, ept: 69.3676
+    Epoch [5/50], Test Losses: mse: 13.6010, mae: 2.8601, huber: 2.4043, swd: 1.7140, ept: 81.3681
+      Epoch 5 composite train-obj: 1.944738
+            No improvement (2.3865), counter 1/5
+    Epoch [6/50], Train Losses: mse: 9.2043, mae: 2.3086, huber: 1.8628, swd: 1.5225, ept: 39.9461
+    Epoch [6/50], Val Losses: mse: 12.7482, mae: 2.8030, huber: 2.3462, swd: 2.3677, ept: 69.0128
+    Epoch [6/50], Test Losses: mse: 13.6256, mae: 2.8547, huber: 2.3989, swd: 1.8444, ept: 83.1714
+      Epoch 6 composite train-obj: 1.862759
+            Val objective improved 2.3628 → 2.3462, saving checkpoint.
+    Epoch [7/50], Train Losses: mse: 8.7563, mae: 2.2382, huber: 1.7948, swd: 1.4258, ept: 40.7694
+    Epoch [7/50], Val Losses: mse: 12.5965, mae: 2.7953, huber: 2.3372, swd: 2.0965, ept: 72.3659
+    Epoch [7/50], Test Losses: mse: 13.3379, mae: 2.8132, huber: 2.3585, swd: 1.6991, ept: 87.4325
+      Epoch 7 composite train-obj: 1.794837
+            Val objective improved 2.3462 → 2.3372, saving checkpoint.
+    Epoch [8/50], Train Losses: mse: 8.3666, mae: 2.1764, huber: 1.7351, swd: 1.3424, ept: 41.7178
+    Epoch [8/50], Val Losses: mse: 12.4666, mae: 2.7577, huber: 2.3026, swd: 2.4560, ept: 76.8866
+    Epoch [8/50], Test Losses: mse: 13.4697, mae: 2.8125, huber: 2.3597, swd: 1.9671, ept: 88.3186
+      Epoch 8 composite train-obj: 1.735142
+            Val objective improved 2.3372 → 2.3026, saving checkpoint.
+    Epoch [9/50], Train Losses: mse: 8.0231, mae: 2.1231, huber: 1.6836, swd: 1.2689, ept: 42.5214
+    Epoch [9/50], Val Losses: mse: 12.2479, mae: 2.7418, huber: 2.2857, swd: 2.4230, ept: 75.3929
+    Epoch [9/50], Test Losses: mse: 13.4335, mae: 2.8066, huber: 2.3541, swd: 1.9805, ept: 91.8582
+      Epoch 9 composite train-obj: 1.683564
+            Val objective improved 2.3026 → 2.2857, saving checkpoint.
+    Epoch [10/50], Train Losses: mse: 7.7298, mae: 2.0753, huber: 1.6374, swd: 1.2056, ept: 42.9989
+    Epoch [10/50], Val Losses: mse: 12.2445, mae: 2.7358, huber: 2.2805, swd: 2.2197, ept: 73.4636
+    Epoch [10/50], Test Losses: mse: 13.4755, mae: 2.8043, huber: 2.3522, swd: 1.7570, ept: 93.1507
+      Epoch 10 composite train-obj: 1.637380
+            Val objective improved 2.2857 → 2.2805, saving checkpoint.
+    Epoch [11/50], Train Losses: mse: 7.4988, mae: 2.0385, huber: 1.6018, swd: 1.1561, ept: 43.3410
+    Epoch [11/50], Val Losses: mse: 12.4122, mae: 2.7548, huber: 2.2991, swd: 2.2688, ept: 75.4509
+    Epoch [11/50], Test Losses: mse: 13.5101, mae: 2.7980, huber: 2.3464, swd: 1.8270, ept: 95.4215
+      Epoch 11 composite train-obj: 1.601779
+            No improvement (2.2991), counter 1/5
+    Epoch [12/50], Train Losses: mse: 7.2690, mae: 2.0012, huber: 1.5658, swd: 1.1108, ept: 43.8180
+    Epoch [12/50], Val Losses: mse: 12.3396, mae: 2.7453, huber: 2.2897, swd: 2.0993, ept: 75.5354
+    Epoch [12/50], Test Losses: mse: 13.6139, mae: 2.8080, huber: 2.3560, swd: 1.7442, ept: 95.7344
+      Epoch 12 composite train-obj: 1.565811
+            No improvement (2.2897), counter 2/5
+    Epoch [13/50], Train Losses: mse: 7.0802, mae: 1.9693, huber: 1.5351, swd: 1.0688, ept: 44.1370
+    Epoch [13/50], Val Losses: mse: 12.3087, mae: 2.7540, huber: 2.2979, swd: 2.0735, ept: 73.8833
+    Epoch [13/50], Test Losses: mse: 13.4496, mae: 2.7890, huber: 2.3374, swd: 1.6986, ept: 97.9447
+      Epoch 13 composite train-obj: 1.535079
+            No improvement (2.2979), counter 3/5
+    Epoch [14/50], Train Losses: mse: 6.9133, mae: 1.9422, huber: 1.5090, swd: 1.0352, ept: 44.4311
+    Epoch [14/50], Val Losses: mse: 12.2399, mae: 2.7511, huber: 2.2940, swd: 2.1721, ept: 76.5518
+    Epoch [14/50], Test Losses: mse: 13.5212, mae: 2.7903, huber: 2.3387, swd: 1.7440, ept: 100.4959
+      Epoch 14 composite train-obj: 1.509028
+            No improvement (2.2940), counter 4/5
+    Epoch [15/50], Train Losses: mse: 6.7723, mae: 1.9179, huber: 1.4857, swd: 1.0075, ept: 44.5261
+    Epoch [15/50], Val Losses: mse: 12.3056, mae: 2.7511, huber: 2.2952, swd: 2.0513, ept: 74.9040
+    Epoch [15/50], Test Losses: mse: 13.7251, mae: 2.8071, huber: 2.3564, swd: 1.6719, ept: 98.4984
+      Epoch 15 composite train-obj: 1.485651
+    Epoch [15/50], Test Losses: mse: 13.4755, mae: 2.8043, huber: 2.3522, swd: 1.7570, ept: 93.1507
+    Best round's Test MSE: 13.4755, MAE: 2.8043, SWD: 1.7570
+    Best round's Validation MSE: 12.2445, MAE: 2.7358, SWD: 2.2197
+    Best round's Test verification MSE : 13.4755, MAE: 2.8043, SWD: 1.7570
+    Time taken: 55.25 seconds
+    
+    ==================================================
+     Running experiment with seed 7 (2/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 14.3661, mae: 3.0146, huber: 2.5508, swd: 2.7749, ept: 24.2996
+    Epoch [1/50], Val Losses: mse: 14.3345, mae: 3.0100, huber: 2.5484, swd: 4.1953, ept: 58.3467
+    Epoch [1/50], Test Losses: mse: 13.7956, mae: 2.9316, huber: 2.4717, swd: 3.0938, ept: 57.8588
+      Epoch 1 composite train-obj: 2.550780
+            Val objective improved inf → 2.5484, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 12.0405, mae: 2.7247, huber: 2.2670, swd: 2.3318, ept: 32.4029
+    Epoch [2/50], Val Losses: mse: 13.6941, mae: 2.9326, huber: 2.4730, swd: 3.5868, ept: 65.5225
+    Epoch [2/50], Test Losses: mse: 13.4407, mae: 2.8717, huber: 2.4145, swd: 2.5435, ept: 67.6207
+      Epoch 2 composite train-obj: 2.266954
+            Val objective improved 2.5484 → 2.4730, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 10.8927, mae: 2.5633, huber: 2.1098, swd: 1.9835, ept: 35.2783
+    Epoch [3/50], Val Losses: mse: 13.0331, mae: 2.8615, huber: 2.4021, swd: 3.5116, ept: 65.9067
+    Epoch [3/50], Test Losses: mse: 13.5250, mae: 2.8792, huber: 2.4218, swd: 2.5735, ept: 71.8547
+      Epoch 3 composite train-obj: 2.109766
+            Val objective improved 2.4730 → 2.4021, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 10.1872, mae: 2.4581, huber: 2.0079, swd: 1.7832, ept: 37.2396
+    Epoch [4/50], Val Losses: mse: 12.7361, mae: 2.8268, huber: 2.3672, swd: 3.1456, ept: 68.9572
+    Epoch [4/50], Test Losses: mse: 13.3567, mae: 2.8466, huber: 2.3899, swd: 2.3448, ept: 74.7619
+      Epoch 4 composite train-obj: 2.007913
+            Val objective improved 2.4021 → 2.3672, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 9.6335, mae: 2.3749, huber: 1.9270, swd: 1.6302, ept: 38.5608
+    Epoch [5/50], Val Losses: mse: 12.6108, mae: 2.8106, huber: 2.3529, swd: 2.5532, ept: 69.8536
+    Epoch [5/50], Test Losses: mse: 13.3491, mae: 2.8330, huber: 2.3774, swd: 2.0575, ept: 77.0946
+      Epoch 5 composite train-obj: 1.926993
+            Val objective improved 2.3672 → 2.3529, saving checkpoint.
+    Epoch [6/50], Train Losses: mse: 9.1298, mae: 2.2974, huber: 1.8521, swd: 1.5160, ept: 39.9628
+    Epoch [6/50], Val Losses: mse: 12.4188, mae: 2.7896, huber: 2.3318, swd: 2.5412, ept: 70.4561
+    Epoch [6/50], Test Losses: mse: 13.4321, mae: 2.8250, huber: 2.3713, swd: 2.0290, ept: 81.6797
+      Epoch 6 composite train-obj: 1.852060
+            Val objective improved 2.3529 → 2.3318, saving checkpoint.
+    Epoch [7/50], Train Losses: mse: 8.7052, mae: 2.2309, huber: 1.7877, swd: 1.4135, ept: 40.9703
+    Epoch [7/50], Val Losses: mse: 12.4247, mae: 2.7724, huber: 2.3158, swd: 2.6292, ept: 75.8995
+    Epoch [7/50], Test Losses: mse: 13.8439, mae: 2.8703, huber: 2.4155, swd: 2.0711, ept: 83.0193
+      Epoch 7 composite train-obj: 1.787653
+            Val objective improved 2.3318 → 2.3158, saving checkpoint.
+    Epoch [8/50], Train Losses: mse: 8.3727, mae: 2.1782, huber: 1.7369, swd: 1.3454, ept: 41.6394
+    Epoch [8/50], Val Losses: mse: 12.3326, mae: 2.7731, huber: 2.3162, swd: 2.3045, ept: 71.5398
+    Epoch [8/50], Test Losses: mse: 13.6182, mae: 2.8389, huber: 2.3853, swd: 1.8172, ept: 84.3865
+      Epoch 8 composite train-obj: 1.736863
+            No improvement (2.3162), counter 1/5
+    Epoch [9/50], Train Losses: mse: 8.0508, mae: 2.1263, huber: 1.6867, swd: 1.2749, ept: 42.4180
+    Epoch [9/50], Val Losses: mse: 12.4693, mae: 2.7774, huber: 2.3203, swd: 2.2004, ept: 72.5267
+    Epoch [9/50], Test Losses: mse: 13.7161, mae: 2.8434, huber: 2.3889, swd: 1.7999, ept: 88.4241
+      Epoch 9 composite train-obj: 1.686735
+            No improvement (2.3203), counter 2/5
+    Epoch [10/50], Train Losses: mse: 7.7708, mae: 2.0816, huber: 1.6435, swd: 1.2176, ept: 43.0680
+    Epoch [10/50], Val Losses: mse: 12.5109, mae: 2.7781, huber: 2.3212, swd: 2.3630, ept: 74.5523
+    Epoch [10/50], Test Losses: mse: 13.7662, mae: 2.8314, huber: 2.3791, swd: 1.8559, ept: 90.8478
+      Epoch 10 composite train-obj: 1.643460
+            No improvement (2.3212), counter 3/5
+    Epoch [11/50], Train Losses: mse: 7.5429, mae: 2.0464, huber: 1.6093, swd: 1.1638, ept: 43.1424
+    Epoch [11/50], Val Losses: mse: 12.2999, mae: 2.7611, huber: 2.3043, swd: 2.4527, ept: 76.1783
+    Epoch [11/50], Test Losses: mse: 13.4010, mae: 2.7940, huber: 2.3411, swd: 1.9323, ept: 91.0612
+      Epoch 11 composite train-obj: 1.609347
+            Val objective improved 2.3158 → 2.3043, saving checkpoint.
+    Epoch [12/50], Train Losses: mse: 7.3260, mae: 2.0098, huber: 1.5743, swd: 1.1193, ept: 43.7517
+    Epoch [12/50], Val Losses: mse: 12.3929, mae: 2.7584, huber: 2.3026, swd: 2.3041, ept: 78.3877
+    Epoch [12/50], Test Losses: mse: 13.6264, mae: 2.8138, huber: 2.3615, swd: 1.8667, ept: 94.8933
+      Epoch 12 composite train-obj: 1.574296
+            Val objective improved 2.3043 → 2.3026, saving checkpoint.
+    Epoch [13/50], Train Losses: mse: 7.1389, mae: 1.9802, huber: 1.5456, swd: 1.0828, ept: 43.8501
+    Epoch [13/50], Val Losses: mse: 12.7423, mae: 2.8023, huber: 2.3449, swd: 2.2802, ept: 76.5578
+    Epoch [13/50], Test Losses: mse: 13.5334, mae: 2.7964, huber: 2.3441, swd: 1.7750, ept: 96.8784
+      Epoch 13 composite train-obj: 1.545552
+            No improvement (2.3449), counter 1/5
+    Epoch [14/50], Train Losses: mse: 6.9727, mae: 1.9520, huber: 1.5185, swd: 1.0447, ept: 44.0798
+    Epoch [14/50], Val Losses: mse: 12.5190, mae: 2.7779, huber: 2.3212, swd: 2.2322, ept: 77.4892
+    Epoch [14/50], Test Losses: mse: 13.3764, mae: 2.7818, huber: 2.3300, swd: 1.7481, ept: 97.9706
+      Epoch 14 composite train-obj: 1.518465
+            No improvement (2.3212), counter 2/5
+    Epoch [15/50], Train Losses: mse: 6.8155, mae: 1.9257, huber: 1.4932, swd: 1.0123, ept: 44.6017
+    Epoch [15/50], Val Losses: mse: 12.7307, mae: 2.7897, huber: 2.3334, swd: 2.1221, ept: 75.9786
+    Epoch [15/50], Test Losses: mse: 13.7975, mae: 2.8176, huber: 2.3655, swd: 1.6305, ept: 98.5777
+      Epoch 15 composite train-obj: 1.493190
+            No improvement (2.3334), counter 3/5
+    Epoch [16/50], Train Losses: mse: 6.6521, mae: 1.8987, huber: 1.4671, swd: 0.9786, ept: 44.7629
+    Epoch [16/50], Val Losses: mse: 12.4961, mae: 2.7628, huber: 2.3073, swd: 2.3870, ept: 79.2992
+    Epoch [16/50], Test Losses: mse: 13.6460, mae: 2.7968, huber: 2.3461, swd: 1.8564, ept: 98.3770
+      Epoch 16 composite train-obj: 1.467133
+            No improvement (2.3073), counter 4/5
+    Epoch [17/50], Train Losses: mse: 6.5543, mae: 1.8816, huber: 1.4507, swd: 0.9531, ept: 44.9798
+    Epoch [17/50], Val Losses: mse: 12.4883, mae: 2.7642, huber: 2.3082, swd: 2.2792, ept: 77.5064
+    Epoch [17/50], Test Losses: mse: 13.6449, mae: 2.7983, huber: 2.3471, swd: 1.7949, ept: 99.1613
+      Epoch 17 composite train-obj: 1.450691
+    Epoch [17/50], Test Losses: mse: 13.6264, mae: 2.8138, huber: 2.3615, swd: 1.8667, ept: 94.8933
+    Best round's Test MSE: 13.6264, MAE: 2.8138, SWD: 1.8667
+    Best round's Validation MSE: 12.3929, MAE: 2.7584, SWD: 2.3041
+    Best round's Test verification MSE : 13.6264, MAE: 2.8138, SWD: 1.8667
+    Time taken: 67.72 seconds
+    
+    ==================================================
+     Running experiment with seed 20 (3/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 14.2367, mae: 2.9999, huber: 2.5362, swd: 2.7329, ept: 24.6250
+    Epoch [1/50], Val Losses: mse: 14.1761, mae: 2.9939, huber: 2.5312, swd: 4.4598, ept: 54.6197
+    Epoch [1/50], Test Losses: mse: 13.6177, mae: 2.9279, huber: 2.4660, swd: 3.7296, ept: 55.9628
+      Epoch 1 composite train-obj: 2.536229
+            Val objective improved inf → 2.5312, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 11.8930, mae: 2.7081, huber: 2.2505, swd: 2.2810, ept: 32.5801
+    Epoch [2/50], Val Losses: mse: 13.6052, mae: 2.9162, huber: 2.4563, swd: 2.8670, ept: 61.7834
+    Epoch [2/50], Test Losses: mse: 13.5620, mae: 2.8862, huber: 2.4278, swd: 2.0789, ept: 64.7200
+      Epoch 2 composite train-obj: 2.250470
+            Val objective improved 2.5312 → 2.4563, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 10.9944, mae: 2.5787, huber: 2.1246, swd: 1.9789, ept: 35.3286
+    Epoch [3/50], Val Losses: mse: 13.3098, mae: 2.8710, huber: 2.4130, swd: 2.8275, ept: 63.5638
+    Epoch [3/50], Test Losses: mse: 13.4247, mae: 2.8630, huber: 2.4060, swd: 2.2470, ept: 68.9895
+      Epoch 3 composite train-obj: 2.124640
+            Val objective improved 2.4563 → 2.4130, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 10.2868, mae: 2.4738, huber: 2.0230, swd: 1.8216, ept: 37.4476
+    Epoch [4/50], Val Losses: mse: 13.1152, mae: 2.8416, huber: 2.3848, swd: 2.4862, ept: 71.8071
+    Epoch [4/50], Test Losses: mse: 13.1942, mae: 2.8193, huber: 2.3638, swd: 1.9594, ept: 75.5511
+      Epoch 4 composite train-obj: 2.023030
+            Val objective improved 2.4130 → 2.3848, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 9.7195, mae: 2.3862, huber: 1.9384, swd: 1.6829, ept: 38.9787
+    Epoch [5/50], Val Losses: mse: 12.2693, mae: 2.7505, huber: 2.2945, swd: 2.5528, ept: 71.6071
+    Epoch [5/50], Test Losses: mse: 13.2392, mae: 2.8130, huber: 2.3579, swd: 2.0246, ept: 79.9716
+      Epoch 5 composite train-obj: 1.938355
+            Val objective improved 2.3848 → 2.2945, saving checkpoint.
+    Epoch [6/50], Train Losses: mse: 9.2419, mae: 2.3129, huber: 1.8674, swd: 1.5639, ept: 40.2396
+    Epoch [6/50], Val Losses: mse: 12.2491, mae: 2.7357, huber: 2.2815, swd: 2.4039, ept: 75.5926
+    Epoch [6/50], Test Losses: mse: 13.2146, mae: 2.7985, huber: 2.3449, swd: 2.0426, ept: 82.2695
+      Epoch 6 composite train-obj: 1.867417
+            Val objective improved 2.2945 → 2.2815, saving checkpoint.
+    Epoch [7/50], Train Losses: mse: 8.8323, mae: 2.2500, huber: 1.8064, swd: 1.4648, ept: 41.1259
+    Epoch [7/50], Val Losses: mse: 12.5621, mae: 2.7739, huber: 2.3186, swd: 2.4865, ept: 75.7499
+    Epoch [7/50], Test Losses: mse: 13.0728, mae: 2.7829, huber: 2.3299, swd: 1.9696, ept: 84.6647
+      Epoch 7 composite train-obj: 1.806418
+            No improvement (2.3186), counter 1/5
+    Epoch [8/50], Train Losses: mse: 8.4612, mae: 2.1926, huber: 1.7510, swd: 1.3921, ept: 41.7215
+    Epoch [8/50], Val Losses: mse: 12.5626, mae: 2.7704, huber: 2.3160, swd: 2.5016, ept: 76.3642
+    Epoch [8/50], Test Losses: mse: 13.1857, mae: 2.7821, huber: 2.3296, swd: 1.9379, ept: 88.6706
+      Epoch 8 composite train-obj: 1.750961
+            No improvement (2.3160), counter 2/5
+    Epoch [9/50], Train Losses: mse: 8.1446, mae: 2.1430, huber: 1.7029, swd: 1.3167, ept: 42.5147
+    Epoch [9/50], Val Losses: mse: 12.5655, mae: 2.7751, huber: 2.3192, swd: 2.0834, ept: 75.6873
+    Epoch [9/50], Test Losses: mse: 13.1823, mae: 2.7781, huber: 2.3255, swd: 1.6726, ept: 90.3511
+      Epoch 9 composite train-obj: 1.702871
+            No improvement (2.3192), counter 3/5
+    Epoch [10/50], Train Losses: mse: 7.8836, mae: 2.1008, huber: 1.6622, swd: 1.2603, ept: 42.8947
+    Epoch [10/50], Val Losses: mse: 12.3623, mae: 2.7555, huber: 2.2992, swd: 2.1307, ept: 78.2824
+    Epoch [10/50], Test Losses: mse: 13.2017, mae: 2.7786, huber: 2.3257, swd: 1.7071, ept: 92.1788
+      Epoch 10 composite train-obj: 1.662169
+            No improvement (2.2992), counter 4/5
+    Epoch [11/50], Train Losses: mse: 7.6305, mae: 2.0590, huber: 1.6219, swd: 1.1994, ept: 43.3038
+    Epoch [11/50], Val Losses: mse: 12.1884, mae: 2.7365, huber: 2.2808, swd: 2.2102, ept: 77.7855
+    Epoch [11/50], Test Losses: mse: 13.0856, mae: 2.7553, huber: 2.3042, swd: 1.7454, ept: 95.1037
+      Epoch 11 composite train-obj: 1.621888
+            Val objective improved 2.2815 → 2.2808, saving checkpoint.
+    Epoch [12/50], Train Losses: mse: 7.4289, mae: 2.0273, huber: 1.5911, swd: 1.1600, ept: 43.4887
+    Epoch [12/50], Val Losses: mse: 12.3366, mae: 2.7412, huber: 2.2861, swd: 2.1952, ept: 81.0539
+    Epoch [12/50], Test Losses: mse: 13.3271, mae: 2.7803, huber: 2.3290, swd: 1.7923, ept: 96.1159
+      Epoch 12 composite train-obj: 1.591062
+            No improvement (2.2861), counter 1/5
+    Epoch [13/50], Train Losses: mse: 7.2333, mae: 1.9946, huber: 1.5597, swd: 1.1209, ept: 43.9638
+    Epoch [13/50], Val Losses: mse: 11.9895, mae: 2.7129, huber: 2.2576, swd: 2.2259, ept: 79.9183
+    Epoch [13/50], Test Losses: mse: 13.2978, mae: 2.7812, huber: 2.3291, swd: 1.8270, ept: 97.6747
+      Epoch 13 composite train-obj: 1.559720
+            Val objective improved 2.2808 → 2.2576, saving checkpoint.
+    Epoch [14/50], Train Losses: mse: 7.0848, mae: 1.9711, huber: 1.5370, swd: 1.0862, ept: 44.3534
+    Epoch [14/50], Val Losses: mse: 12.5168, mae: 2.7625, huber: 2.3064, swd: 2.1634, ept: 80.6797
+    Epoch [14/50], Test Losses: mse: 13.5802, mae: 2.8027, huber: 2.3511, swd: 1.7169, ept: 97.6463
+      Epoch 14 composite train-obj: 1.536957
+            No improvement (2.3064), counter 1/5
+    Epoch [15/50], Train Losses: mse: 6.9239, mae: 1.9430, huber: 1.5100, swd: 1.0511, ept: 44.6000
+    Epoch [15/50], Val Losses: mse: 12.6731, mae: 2.7948, huber: 2.3375, swd: 2.0343, ept: 75.7704
+    Epoch [15/50], Test Losses: mse: 13.5371, mae: 2.7959, huber: 2.3442, swd: 1.5615, ept: 97.4317
+      Epoch 15 composite train-obj: 1.510020
+            No improvement (2.3375), counter 2/5
+    Epoch [16/50], Train Losses: mse: 6.7677, mae: 1.9183, huber: 1.4861, swd: 1.0272, ept: 44.7621
+    Epoch [16/50], Val Losses: mse: 12.7711, mae: 2.7883, huber: 2.3322, swd: 2.1904, ept: 79.6432
+    Epoch [16/50], Test Losses: mse: 13.3326, mae: 2.7728, huber: 2.3216, swd: 1.6752, ept: 99.2713
+      Epoch 16 composite train-obj: 1.486130
+            No improvement (2.3322), counter 3/5
+    Epoch [17/50], Train Losses: mse: 6.6207, mae: 1.8923, huber: 1.4612, swd: 0.9946, ept: 44.9564
+    Epoch [17/50], Val Losses: mse: 12.4863, mae: 2.7560, huber: 2.3007, swd: 2.2164, ept: 79.8841
+    Epoch [17/50], Test Losses: mse: 13.4459, mae: 2.7775, huber: 2.3270, swd: 1.7478, ept: 101.8798
+      Epoch 17 composite train-obj: 1.461230
+            No improvement (2.3007), counter 4/5
+    Epoch [18/50], Train Losses: mse: 6.5131, mae: 1.8743, huber: 1.4439, swd: 0.9667, ept: 45.0126
+    Epoch [18/50], Val Losses: mse: 12.5581, mae: 2.7695, huber: 2.3131, swd: 2.2521, ept: 80.0021
+    Epoch [18/50], Test Losses: mse: 13.2610, mae: 2.7561, huber: 2.3062, swd: 1.7476, ept: 102.0002
+      Epoch 18 composite train-obj: 1.443949
+    Epoch [18/50], Test Losses: mse: 13.2978, mae: 2.7812, huber: 2.3291, swd: 1.8270, ept: 97.6747
+    Best round's Test MSE: 13.2978, MAE: 2.7812, SWD: 1.8270
+    Best round's Validation MSE: 11.9895, MAE: 2.7129, SWD: 2.2259
+    Best round's Test verification MSE : 13.2978, MAE: 2.7812, SWD: 1.8270
+    Time taken: 69.52 seconds
+    
+    ==================================================
+    Experiment Summary (PatchTST_lorenz96_seq336_pred336_20250512_2207)
+    ==================================================
+    Number of runs: 3
+    Seeds: [1955, 7, 20]
+    
+    Test Performance at Best Validation (mean ± std):
+      mse: 13.4666 ± 0.1343
+      mae: 2.7998 ± 0.0137
+      huber: 2.3476 ± 0.0137
+      swd: 1.8169 ± 0.0453
+      ept: 95.2396 ± 1.8631
+      count: 10.0000 ± 0.0000
+    
+    Corresponding Validation Performance (mean ± std):
+      mse: 12.2090 ± 0.1666
+      mae: 2.7357 ± 0.0186
+      huber: 2.2802 ± 0.0184
+      swd: 2.2499 ± 0.0384
+      ept: 77.2565 ± 2.7539
+      count: 10.0000 ± 0.0000
+    ==================================================
+    Three seeds Time taken: 192.59 seconds
+    
+    Experiment complete: PatchTST_lorenz96_seq336_pred336_20250512_2207
+    Model: PatchTST
+    Dataset: lorenz96
+    Sequence Length: 336
+    Prediction Length: 336
+    Seeds: [1955, 7, 20]
+    
+
+##### huber + 0.5
+
+
+```python
+utils.reload_modules([utils])
+cfg = train_config.FlatPatchTSTConfig(
+    seq_len=336,
+    pred_len=336,
+    channels=data_mgr.datasets['lorenz96']['channels'],
+    enc_in=data_mgr.datasets['lorenz96']['channels'],
+    dec_in=data_mgr.datasets['lorenz96']['channels'],
+    c_out=data_mgr.datasets['lorenz96']['channels'],
+    batch_size=128,
+    learning_rate=9e-4,
+    seeds=[1955, 7, 20],
+    epochs=50,
+    task_name='long_term_forecast',
+    factor=3,
+    loss_backward_weights = [0.0, 0.0, 1.0, 0.5, 0.0],
+    loss_validate_weights = [0.0, 0.0, 1.0, 0.5, 0.0],
+)
+exp = execute_model_evaluation('lorenz96', cfg, data_mgr, scale=False)
+```
+
+    Reloading modules...
+      Reloaded: utils
+    Module reload complete.
+    Shape of training data: torch.Size([13300, 6])
+    Shape of validation data: torch.Size([1900, 6])
+    Shape of testing data: torch.Size([3800, 6])
+    global_std.shape: torch.Size([6])
+    Global Std for lorenz96: tensor([3.6750, 3.6678, 3.7240, 3.7347, 3.8038, 3.5588], device='cuda:0')
+    Train set sample shapes: torch.Size([336, 6]), torch.Size([336, 6])
+    Validation set sample shapes: torch.Size([336, 6]), torch.Size([336, 6])
+    Test set data shapes: torch.Size([3800, 6]), torch.Size([3800, 6])
+    Number of batches in train_loader: 99
+    Batch 0: Data shape torch.Size([128, 336, 6]), Target shape torch.Size([128, 336, 6])
+    
+    ==================================================
+    Data Preparation: lorenz96
+    ==================================================
+    Sequence Length: 336
+    Prediction Length: 336
+    Batch Size: 128
+    Scaling: No
+    Train Split: 0.7
+    Val Split: 0.8
+    Training Batches: 99
+    Validation Batches: 10
+    Test Batches: 25
+    ==================================================
+    
+    ==================================================
+     Running experiment with seed 1955 (1/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 20.0927, mae: 3.5560, huber: 3.0861, swd: 1.9761, ept: 8.3543
+    Epoch [1/50], Val Losses: mse: 17.2985, mae: 3.3190, huber: 2.8520, swd: 2.5744, ept: 29.4374
+    Epoch [1/50], Test Losses: mse: 16.7553, mae: 3.2356, huber: 2.7703, swd: 1.5319, ept: 30.3732
+      Epoch 1 composite train-obj: 4.074129
+            Val objective improved inf → 4.1392, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 15.2551, mae: 3.0872, huber: 2.6229, swd: 1.0455, ept: 20.1366
+    Epoch [2/50], Val Losses: mse: 16.0193, mae: 3.1642, huber: 2.7001, swd: 2.1999, ept: 37.2915
+    Epoch [2/50], Test Losses: mse: 16.5105, mae: 3.1925, huber: 2.7286, swd: 1.5482, ept: 38.3919
+      Epoch 2 composite train-obj: 3.145678
+            Val objective improved 4.1392 → 3.8001, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 14.1362, mae: 2.9532, huber: 2.4914, swd: 0.9288, ept: 23.2873
+    Epoch [3/50], Val Losses: mse: 15.0775, mae: 3.0738, huber: 2.6106, swd: 2.1084, ept: 40.7873
+    Epoch [3/50], Test Losses: mse: 15.7716, mae: 3.1205, huber: 2.6575, swd: 1.5132, ept: 42.5434
+      Epoch 3 composite train-obj: 2.955815
+            Val objective improved 3.8001 → 3.6648, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 13.2982, mae: 2.8498, huber: 2.3901, swd: 0.8338, ept: 25.4554
+    Epoch [4/50], Val Losses: mse: 15.0690, mae: 3.0537, huber: 2.5917, swd: 2.0628, ept: 43.0368
+    Epoch [4/50], Test Losses: mse: 16.0679, mae: 3.1438, huber: 2.6813, swd: 1.5278, ept: 43.2846
+      Epoch 4 composite train-obj: 2.807007
+            Val objective improved 3.6648 → 3.6231, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 12.6837, mae: 2.7712, huber: 2.3131, swd: 0.7479, ept: 26.9534
+    Epoch [5/50], Val Losses: mse: 14.9095, mae: 3.0306, huber: 2.5692, swd: 1.8936, ept: 45.0880
+    Epoch [5/50], Test Losses: mse: 15.7635, mae: 3.1106, huber: 2.6484, swd: 1.3914, ept: 46.7463
+      Epoch 5 composite train-obj: 2.687024
+            Val objective improved 3.6231 → 3.5160, saving checkpoint.
+    Epoch [6/50], Train Losses: mse: 12.0718, mae: 2.6909, huber: 2.2346, swd: 0.6809, ept: 28.6816
+    Epoch [6/50], Val Losses: mse: 14.6113, mae: 3.0112, huber: 2.5504, swd: 1.8472, ept: 48.0249
+    Epoch [6/50], Test Losses: mse: 15.4264, mae: 3.0734, huber: 2.6123, swd: 1.3938, ept: 49.8487
+      Epoch 6 composite train-obj: 2.575066
+            Val objective improved 3.5160 → 3.4740, saving checkpoint.
+    Epoch [7/50], Train Losses: mse: 11.5527, mae: 2.6209, huber: 2.1663, swd: 0.6164, ept: 30.2318
+    Epoch [7/50], Val Losses: mse: 14.6733, mae: 3.0112, huber: 2.5504, swd: 1.8567, ept: 51.7878
+    Epoch [7/50], Test Losses: mse: 15.5439, mae: 3.0757, huber: 2.6152, swd: 1.4188, ept: 52.7993
+      Epoch 7 composite train-obj: 2.474551
+            No improvement (3.4787), counter 1/5
+    Epoch [8/50], Train Losses: mse: 11.1234, mae: 2.5612, huber: 2.1083, swd: 0.5778, ept: 31.6737
+    Epoch [8/50], Val Losses: mse: 14.1105, mae: 2.9554, huber: 2.4950, swd: 1.6518, ept: 53.6331
+    Epoch [8/50], Test Losses: mse: 15.1097, mae: 3.0269, huber: 2.5672, swd: 1.2957, ept: 55.1081
+      Epoch 8 composite train-obj: 2.397208
+            Val objective improved 3.4740 → 3.3209, saving checkpoint.
+    Epoch [9/50], Train Losses: mse: 10.7195, mae: 2.5052, huber: 2.0536, swd: 0.5387, ept: 32.5351
+    Epoch [9/50], Val Losses: mse: 13.6975, mae: 2.9096, huber: 2.4500, swd: 1.7404, ept: 56.3457
+    Epoch [9/50], Test Losses: mse: 15.1168, mae: 3.0189, huber: 2.5599, swd: 1.2565, ept: 58.3498
+      Epoch 9 composite train-obj: 2.322981
+            Val objective improved 3.3209 → 3.3202, saving checkpoint.
+    Epoch [10/50], Train Losses: mse: 10.3515, mae: 2.4526, huber: 2.0025, swd: 0.4960, ept: 33.6732
+    Epoch [10/50], Val Losses: mse: 13.6292, mae: 2.9000, huber: 2.4408, swd: 1.5977, ept: 55.4417
+    Epoch [10/50], Test Losses: mse: 14.9873, mae: 3.0007, huber: 2.5424, swd: 1.3052, ept: 57.5262
+      Epoch 10 composite train-obj: 2.250441
+            Val objective improved 3.3202 → 3.2397, saving checkpoint.
+    Epoch [11/50], Train Losses: mse: 10.0711, mae: 2.4121, huber: 1.9631, swd: 0.4833, ept: 34.3737
+    Epoch [11/50], Val Losses: mse: 13.7370, mae: 2.9123, huber: 2.4526, swd: 1.7725, ept: 55.8743
+    Epoch [11/50], Test Losses: mse: 15.1155, mae: 3.0065, huber: 2.5482, swd: 1.2990, ept: 61.9947
+      Epoch 11 composite train-obj: 2.204764
+            No improvement (3.3389), counter 1/5
+    Epoch [12/50], Train Losses: mse: 9.7591, mae: 2.3667, huber: 1.9190, swd: 0.4589, ept: 35.2918
+    Epoch [12/50], Val Losses: mse: 13.6130, mae: 2.8904, huber: 2.4322, swd: 1.7161, ept: 56.8834
+    Epoch [12/50], Test Losses: mse: 14.9937, mae: 2.9839, huber: 2.5269, swd: 1.2589, ept: 63.0760
+      Epoch 12 composite train-obj: 2.148504
+            No improvement (3.2902), counter 2/5
+    Epoch [13/50], Train Losses: mse: 9.5028, mae: 2.3286, huber: 1.8820, swd: 0.4402, ept: 36.0407
+    Epoch [13/50], Val Losses: mse: 13.4785, mae: 2.8866, huber: 2.4278, swd: 1.5959, ept: 56.3321
+    Epoch [13/50], Test Losses: mse: 14.8233, mae: 2.9701, huber: 2.5126, swd: 1.3281, ept: 64.9554
+      Epoch 13 composite train-obj: 2.102121
+            Val objective improved 3.2397 → 3.2257, saving checkpoint.
+    Epoch [14/50], Train Losses: mse: 9.2581, mae: 2.2935, huber: 1.8478, swd: 0.4281, ept: 36.6682
+    Epoch [14/50], Val Losses: mse: 13.3314, mae: 2.8660, huber: 2.4077, swd: 1.6891, ept: 57.6704
+    Epoch [14/50], Test Losses: mse: 14.8759, mae: 2.9689, huber: 2.5118, swd: 1.2643, ept: 67.7737
+      Epoch 14 composite train-obj: 2.061889
+            No improvement (3.2523), counter 1/5
+    Epoch [15/50], Train Losses: mse: 9.0280, mae: 2.2597, huber: 1.8151, swd: 0.4152, ept: 37.1116
+    Epoch [15/50], Val Losses: mse: 13.4940, mae: 2.8836, huber: 2.4248, swd: 1.6257, ept: 60.1556
+    Epoch [15/50], Test Losses: mse: 15.1013, mae: 2.9808, huber: 2.5247, swd: 1.2654, ept: 67.7847
+      Epoch 15 composite train-obj: 2.022710
+            No improvement (3.2376), counter 2/5
+    Epoch [16/50], Train Losses: mse: 8.7890, mae: 2.2236, huber: 1.7801, swd: 0.3996, ept: 37.7618
+    Epoch [16/50], Val Losses: mse: 13.5711, mae: 2.8878, huber: 2.4294, swd: 1.6285, ept: 61.0813
+    Epoch [16/50], Test Losses: mse: 14.7611, mae: 2.9497, huber: 2.4939, swd: 1.3040, ept: 70.3467
+      Epoch 16 composite train-obj: 1.979953
+            No improvement (3.2436), counter 3/5
+    Epoch [17/50], Train Losses: mse: 8.5824, mae: 2.1924, huber: 1.7499, swd: 0.3849, ept: 38.4132
+    Epoch [17/50], Val Losses: mse: 13.3610, mae: 2.8652, huber: 2.4070, swd: 1.5978, ept: 62.6254
+    Epoch [17/50], Test Losses: mse: 14.7787, mae: 2.9454, huber: 2.4899, swd: 1.3232, ept: 71.3994
+      Epoch 17 composite train-obj: 1.942371
+            Val objective improved 3.2257 → 3.2059, saving checkpoint.
+    Epoch [18/50], Train Losses: mse: 8.4030, mae: 2.1653, huber: 1.7236, swd: 0.3760, ept: 38.8485
+    Epoch [18/50], Val Losses: mse: 13.3686, mae: 2.8620, huber: 2.4042, swd: 1.5851, ept: 63.5152
+    Epoch [18/50], Test Losses: mse: 14.8483, mae: 2.9481, huber: 2.4923, swd: 1.2993, ept: 72.9631
+      Epoch 18 composite train-obj: 1.911590
+            Val objective improved 3.2059 → 3.1968, saving checkpoint.
+    Epoch [19/50], Train Losses: mse: 8.2178, mae: 2.1391, huber: 1.6982, swd: 0.3715, ept: 38.9642
+    Epoch [19/50], Val Losses: mse: 13.4105, mae: 2.8785, huber: 2.4203, swd: 1.6746, ept: 61.2716
+    Epoch [19/50], Test Losses: mse: 14.6481, mae: 2.9258, huber: 2.4706, swd: 1.3207, ept: 73.9974
+      Epoch 19 composite train-obj: 1.883965
+            No improvement (3.2576), counter 1/5
+    Epoch [20/50], Train Losses: mse: 8.0712, mae: 2.1169, huber: 1.6765, swd: 0.3649, ept: 39.4991
+    Epoch [20/50], Val Losses: mse: 13.3108, mae: 2.8495, huber: 2.3924, swd: 1.6261, ept: 63.0253
+    Epoch [20/50], Test Losses: mse: 15.0956, mae: 2.9754, huber: 2.5195, swd: 1.2924, ept: 73.8840
+      Epoch 20 composite train-obj: 1.858932
+            No improvement (3.2055), counter 2/5
+    Epoch [21/50], Train Losses: mse: 7.9034, mae: 2.0918, huber: 1.6521, swd: 0.3526, ept: 40.0203
+    Epoch [21/50], Val Losses: mse: 13.6110, mae: 2.8853, huber: 2.4277, swd: 1.5998, ept: 64.0718
+    Epoch [21/50], Test Losses: mse: 15.0834, mae: 2.9599, huber: 2.5045, swd: 1.3228, ept: 76.2231
+      Epoch 21 composite train-obj: 1.828438
+            No improvement (3.2275), counter 3/5
+    Epoch [22/50], Train Losses: mse: 7.7445, mae: 2.0666, huber: 1.6279, swd: 0.3440, ept: 40.2501
+    Epoch [22/50], Val Losses: mse: 13.3764, mae: 2.8625, huber: 2.4049, swd: 1.6263, ept: 64.2924
+    Epoch [22/50], Test Losses: mse: 15.0131, mae: 2.9620, huber: 2.5067, swd: 1.2948, ept: 76.8110
+      Epoch 22 composite train-obj: 1.799902
+            No improvement (3.2181), counter 4/5
+    Epoch [23/50], Train Losses: mse: 7.6146, mae: 2.0462, huber: 1.6082, swd: 0.3397, ept: 40.3956
+    Epoch [23/50], Val Losses: mse: 13.3408, mae: 2.8615, huber: 2.4041, swd: 1.6639, ept: 64.9920
+    Epoch [23/50], Test Losses: mse: 14.9482, mae: 2.9461, huber: 2.4913, swd: 1.3356, ept: 77.9403
+      Epoch 23 composite train-obj: 1.778084
+    Epoch [23/50], Test Losses: mse: 14.8483, mae: 2.9481, huber: 2.4923, swd: 1.2993, ept: 72.9631
+    Best round's Test MSE: 14.8483, MAE: 2.9481, SWD: 1.2993
+    Best round's Validation MSE: 13.3686, MAE: 2.8620, SWD: 1.5851
+    Best round's Test verification MSE : 14.8483, MAE: 2.9481, SWD: 1.2993
+    Time taken: 82.00 seconds
+    
+    ==================================================
+     Running experiment with seed 7 (2/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 19.5345, mae: 3.4970, huber: 3.0278, swd: 1.9693, ept: 11.1025
+    Epoch [1/50], Val Losses: mse: 17.4618, mae: 3.3354, huber: 2.8681, swd: 2.7957, ept: 30.6317
+    Epoch [1/50], Test Losses: mse: 16.9355, mae: 3.2508, huber: 2.7850, swd: 1.5867, ept: 29.9412
+      Epoch 1 composite train-obj: 4.012451
+            Val objective improved inf → 4.2660, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 15.4226, mae: 3.1057, huber: 2.6411, swd: 1.0936, ept: 20.2618
+    Epoch [2/50], Val Losses: mse: 16.2669, mae: 3.1921, huber: 2.7281, swd: 2.5144, ept: 36.5852
+    Epoch [2/50], Test Losses: mse: 15.8550, mae: 3.1259, huber: 2.6632, swd: 1.5163, ept: 38.7227
+      Epoch 2 composite train-obj: 3.187909
+            Val objective improved 4.2660 → 3.9853, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 14.2596, mae: 2.9650, huber: 2.5031, swd: 0.9482, ept: 23.4544
+    Epoch [3/50], Val Losses: mse: 15.1628, mae: 3.0703, huber: 2.6084, swd: 2.2919, ept: 43.4813
+    Epoch [3/50], Test Losses: mse: 16.0876, mae: 3.1433, huber: 2.6806, swd: 1.5235, ept: 43.8262
+      Epoch 3 composite train-obj: 2.977212
+            Val objective improved 3.9853 → 3.7543, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 13.2773, mae: 2.8441, huber: 2.3845, swd: 0.8353, ept: 25.6170
+    Epoch [4/50], Val Losses: mse: 14.2938, mae: 2.9805, huber: 2.5194, swd: 1.9101, ept: 44.6116
+    Epoch [4/50], Test Losses: mse: 15.3030, mae: 3.0621, huber: 2.6008, swd: 1.3739, ept: 45.9747
+      Epoch 4 composite train-obj: 2.802131
+            Val objective improved 3.7543 → 3.4745, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 12.5141, mae: 2.7473, huber: 2.2897, swd: 0.7514, ept: 27.4247
+    Epoch [5/50], Val Losses: mse: 14.5025, mae: 3.0111, huber: 2.5494, swd: 1.8984, ept: 46.1190
+    Epoch [5/50], Test Losses: mse: 15.2483, mae: 3.0503, huber: 2.5898, swd: 1.3387, ept: 49.2521
+      Epoch 5 composite train-obj: 2.665404
+            No improvement (3.4986), counter 1/5
+    Epoch [6/50], Train Losses: mse: 11.9236, mae: 2.6701, huber: 2.2144, swd: 0.6746, ept: 29.0003
+    Epoch [6/50], Val Losses: mse: 14.1672, mae: 2.9645, huber: 2.5042, swd: 1.7746, ept: 49.7888
+    Epoch [6/50], Test Losses: mse: 15.0519, mae: 3.0317, huber: 2.5716, swd: 1.3127, ept: 52.5103
+      Epoch 6 composite train-obj: 2.551668
+            Val objective improved 3.4745 → 3.3915, saving checkpoint.
+    Epoch [7/50], Train Losses: mse: 11.4538, mae: 2.6068, huber: 2.1526, swd: 0.6283, ept: 30.3253
+    Epoch [7/50], Val Losses: mse: 13.9244, mae: 2.9465, huber: 2.4860, swd: 1.8015, ept: 50.4018
+    Epoch [7/50], Test Losses: mse: 15.1978, mae: 3.0284, huber: 2.5692, swd: 1.2854, ept: 53.8794
+      Epoch 7 composite train-obj: 2.466763
+            Val objective improved 3.3915 → 3.3868, saving checkpoint.
+    Epoch [8/50], Train Losses: mse: 11.0315, mae: 2.5484, huber: 2.0958, swd: 0.5782, ept: 31.5383
+    Epoch [8/50], Val Losses: mse: 13.9308, mae: 2.9421, huber: 2.4813, swd: 1.7723, ept: 52.2711
+    Epoch [8/50], Test Losses: mse: 14.9366, mae: 3.0067, huber: 2.5471, swd: 1.3652, ept: 56.9241
+      Epoch 8 composite train-obj: 2.384942
+            Val objective improved 3.3868 → 3.3675, saving checkpoint.
+    Epoch [9/50], Train Losses: mse: 10.6882, mae: 2.5004, huber: 2.0490, swd: 0.5519, ept: 32.6364
+    Epoch [9/50], Val Losses: mse: 13.9356, mae: 2.9468, huber: 2.4865, swd: 1.7473, ept: 52.8377
+    Epoch [9/50], Test Losses: mse: 14.7396, mae: 2.9781, huber: 2.5198, swd: 1.3019, ept: 58.3823
+      Epoch 9 composite train-obj: 2.324949
+            Val objective improved 3.3675 → 3.3602, saving checkpoint.
+    Epoch [10/50], Train Losses: mse: 10.3592, mae: 2.4539, huber: 2.0038, swd: 0.5215, ept: 33.7621
+    Epoch [10/50], Val Losses: mse: 13.5406, mae: 2.8966, huber: 2.4369, swd: 1.7261, ept: 55.8517
+    Epoch [10/50], Test Losses: mse: 14.4863, mae: 2.9527, huber: 2.4948, swd: 1.2943, ept: 60.3683
+      Epoch 10 composite train-obj: 2.264584
+            Val objective improved 3.3602 → 3.2999, saving checkpoint.
+    Epoch [11/50], Train Losses: mse: 10.0933, mae: 2.4156, huber: 1.9666, swd: 0.4993, ept: 34.2937
+    Epoch [11/50], Val Losses: mse: 13.0930, mae: 2.8557, huber: 2.3962, swd: 1.5261, ept: 56.8224
+    Epoch [11/50], Test Losses: mse: 14.5192, mae: 2.9478, huber: 2.4904, swd: 1.3460, ept: 63.1988
+      Epoch 11 composite train-obj: 2.216220
+            Val objective improved 3.2999 → 3.1593, saving checkpoint.
+    Epoch [12/50], Train Losses: mse: 9.7887, mae: 2.3717, huber: 1.9240, swd: 0.4688, ept: 35.4854
+    Epoch [12/50], Val Losses: mse: 13.5465, mae: 2.8928, huber: 2.4334, swd: 1.6674, ept: 58.3947
+    Epoch [12/50], Test Losses: mse: 14.5483, mae: 2.9520, huber: 2.4951, swd: 1.3415, ept: 65.7341
+      Epoch 12 composite train-obj: 2.158347
+            No improvement (3.2671), counter 1/5
+    Epoch [13/50], Train Losses: mse: 9.5847, mae: 2.3401, huber: 1.8933, swd: 0.4586, ept: 35.9086
+    Epoch [13/50], Val Losses: mse: 13.6367, mae: 2.9010, huber: 2.4414, swd: 1.6159, ept: 57.8637
+    Epoch [13/50], Test Losses: mse: 14.6921, mae: 2.9604, huber: 2.5033, swd: 1.3672, ept: 65.1393
+      Epoch 13 composite train-obj: 2.122623
+            No improvement (3.2494), counter 2/5
+    Epoch [14/50], Train Losses: mse: 9.3557, mae: 2.3072, huber: 1.8614, swd: 0.4435, ept: 36.4867
+    Epoch [14/50], Val Losses: mse: 13.3351, mae: 2.8771, huber: 2.4175, swd: 1.6309, ept: 60.1894
+    Epoch [14/50], Test Losses: mse: 14.3619, mae: 2.9230, huber: 2.4663, swd: 1.3286, ept: 67.4681
+      Epoch 14 composite train-obj: 2.083124
+            No improvement (3.2330), counter 3/5
+    Epoch [15/50], Train Losses: mse: 9.1147, mae: 2.2703, huber: 1.8257, swd: 0.4191, ept: 37.4392
+    Epoch [15/50], Val Losses: mse: 13.0365, mae: 2.8386, huber: 2.3801, swd: 1.5991, ept: 60.1314
+    Epoch [15/50], Test Losses: mse: 14.5440, mae: 2.9406, huber: 2.4840, swd: 1.2927, ept: 69.2763
+      Epoch 15 composite train-obj: 2.035246
+            No improvement (3.1797), counter 4/5
+    Epoch [16/50], Train Losses: mse: 8.9319, mae: 2.2429, huber: 1.7990, swd: 0.4128, ept: 37.8790
+    Epoch [16/50], Val Losses: mse: 13.2139, mae: 2.8549, huber: 2.3962, swd: 1.6508, ept: 62.4178
+    Epoch [16/50], Test Losses: mse: 14.3986, mae: 2.9235, huber: 2.4673, swd: 1.3272, ept: 69.0990
+      Epoch 16 composite train-obj: 2.005383
+    Epoch [16/50], Test Losses: mse: 14.5192, mae: 2.9478, huber: 2.4904, swd: 1.3460, ept: 63.1988
+    Best round's Test MSE: 14.5192, MAE: 2.9478, SWD: 1.3460
+    Best round's Validation MSE: 13.0930, MAE: 2.8557, SWD: 1.5261
+    Best round's Test verification MSE : 14.5192, MAE: 2.9478, SWD: 1.3460
+    Time taken: 57.66 seconds
+    
+    ==================================================
+     Running experiment with seed 20 (3/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 19.2765, mae: 3.4788, huber: 3.0097, swd: 1.8041, ept: 10.7130
+    Epoch [1/50], Val Losses: mse: 17.3285, mae: 3.3246, huber: 2.8573, swd: 2.5935, ept: 28.3400
+    Epoch [1/50], Test Losses: mse: 16.9829, mae: 3.2554, huber: 2.7900, swd: 1.4734, ept: 28.0378
+      Epoch 1 composite train-obj: 3.911733
+            Val objective improved inf → 4.1541, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 15.3435, mae: 3.0943, huber: 2.6300, swd: 1.0328, ept: 19.8987
+    Epoch [2/50], Val Losses: mse: 16.1763, mae: 3.1897, huber: 2.7252, swd: 2.2518, ept: 36.1891
+    Epoch [2/50], Test Losses: mse: 16.4234, mae: 3.1812, huber: 2.7180, swd: 1.4417, ept: 36.6309
+      Epoch 2 composite train-obj: 3.146423
+            Val objective improved 4.1541 → 3.8511, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 14.1858, mae: 2.9578, huber: 2.4960, swd: 0.9082, ept: 23.0899
+    Epoch [3/50], Val Losses: mse: 14.4815, mae: 3.0086, huber: 2.5462, swd: 2.0119, ept: 41.0995
+    Epoch [3/50], Test Losses: mse: 15.2947, mae: 3.0675, huber: 2.6059, swd: 1.3670, ept: 42.8160
+      Epoch 3 composite train-obj: 2.950060
+            Val objective improved 3.8511 → 3.5522, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 13.2006, mae: 2.8370, huber: 2.3775, swd: 0.8087, ept: 25.2750
+    Epoch [4/50], Val Losses: mse: 14.2682, mae: 2.9766, huber: 2.5152, swd: 1.8458, ept: 44.4318
+    Epoch [4/50], Test Losses: mse: 14.8685, mae: 3.0221, huber: 2.5612, swd: 1.2955, ept: 46.2306
+      Epoch 4 composite train-obj: 2.781848
+            Val objective improved 3.5522 → 3.4381, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 12.4527, mae: 2.7410, huber: 2.2836, swd: 0.7194, ept: 27.2108
+    Epoch [5/50], Val Losses: mse: 14.0276, mae: 2.9430, huber: 2.4831, swd: 1.6488, ept: 47.7543
+    Epoch [5/50], Test Losses: mse: 14.8265, mae: 3.0081, huber: 2.5482, swd: 1.2157, ept: 48.2776
+      Epoch 5 composite train-obj: 2.643274
+            Val objective improved 3.4381 → 3.3075, saving checkpoint.
+    Epoch [6/50], Train Losses: mse: 11.8628, mae: 2.6634, huber: 2.2078, swd: 0.6510, ept: 29.0087
+    Epoch [6/50], Val Losses: mse: 13.4368, mae: 2.8814, huber: 2.4222, swd: 1.6357, ept: 48.1240
+    Epoch [6/50], Test Losses: mse: 15.0863, mae: 3.0270, huber: 2.5669, swd: 1.1641, ept: 50.8151
+      Epoch 6 composite train-obj: 2.533249
+            Val objective improved 3.3075 → 3.2401, saving checkpoint.
+    Epoch [7/50], Train Losses: mse: 11.3503, mae: 2.5935, huber: 2.1397, swd: 0.5967, ept: 30.4535
+    Epoch [7/50], Val Losses: mse: 13.5254, mae: 2.8922, huber: 2.4331, swd: 1.5722, ept: 51.4572
+    Epoch [7/50], Test Losses: mse: 14.9694, mae: 3.0136, huber: 2.5544, swd: 1.2315, ept: 53.7381
+      Epoch 7 composite train-obj: 2.438054
+            Val objective improved 3.2401 → 3.2192, saving checkpoint.
+    Epoch [8/50], Train Losses: mse: 10.9375, mae: 2.5355, huber: 2.0832, swd: 0.5503, ept: 31.7634
+    Epoch [8/50], Val Losses: mse: 13.3323, mae: 2.8707, huber: 2.4115, swd: 1.6332, ept: 50.8534
+    Epoch [8/50], Test Losses: mse: 14.8343, mae: 2.9978, huber: 2.5385, swd: 1.2371, ept: 55.2690
+      Epoch 8 composite train-obj: 2.358413
+            No improvement (3.2281), counter 1/5
+    Epoch [9/50], Train Losses: mse: 10.5627, mae: 2.4835, huber: 2.0326, swd: 0.5212, ept: 32.9314
+    Epoch [9/50], Val Losses: mse: 13.3861, mae: 2.8790, huber: 2.4197, swd: 1.4815, ept: 52.3206
+    Epoch [9/50], Test Losses: mse: 14.5627, mae: 2.9636, huber: 2.5055, swd: 1.2543, ept: 58.7651
+      Epoch 9 composite train-obj: 2.293202
+            Val objective improved 3.2192 → 3.1604, saving checkpoint.
+    Epoch [10/50], Train Losses: mse: 10.2466, mae: 2.4382, huber: 1.9885, swd: 0.4949, ept: 33.5698
+    Epoch [10/50], Val Losses: mse: 12.9179, mae: 2.8247, huber: 2.3664, swd: 1.6125, ept: 55.8510
+    Epoch [10/50], Test Losses: mse: 14.6661, mae: 2.9692, huber: 2.5112, swd: 1.2561, ept: 61.5926
+      Epoch 10 composite train-obj: 2.235984
+            No improvement (3.1727), counter 1/5
+    Epoch [11/50], Train Losses: mse: 9.8848, mae: 2.3863, huber: 1.9380, swd: 0.4623, ept: 34.6095
+    Epoch [11/50], Val Losses: mse: 13.2103, mae: 2.8554, huber: 2.3967, swd: 1.5228, ept: 54.7280
+    Epoch [11/50], Test Losses: mse: 14.8146, mae: 2.9791, huber: 2.5210, swd: 1.1954, ept: 60.7767
+      Epoch 11 composite train-obj: 2.169183
+            Val objective improved 3.1604 → 3.1581, saving checkpoint.
+    Epoch [12/50], Train Losses: mse: 9.5975, mae: 2.3438, huber: 1.8968, swd: 0.4487, ept: 35.2742
+    Epoch [12/50], Val Losses: mse: 13.1334, mae: 2.8524, huber: 2.3933, swd: 1.6210, ept: 54.2486
+    Epoch [12/50], Test Losses: mse: 14.4906, mae: 2.9491, huber: 2.4912, swd: 1.2407, ept: 63.3825
+      Epoch 12 composite train-obj: 2.121123
+            No improvement (3.2038), counter 1/5
+    Epoch [13/50], Train Losses: mse: 9.3163, mae: 2.3023, huber: 1.8566, swd: 0.4319, ept: 36.1143
+    Epoch [13/50], Val Losses: mse: 12.8670, mae: 2.8189, huber: 2.3606, swd: 1.5202, ept: 56.4704
+    Epoch [13/50], Test Losses: mse: 14.7219, mae: 2.9624, huber: 2.5051, swd: 1.2433, ept: 67.9366
+      Epoch 13 composite train-obj: 2.072510
+            Val objective improved 3.1581 → 3.1207, saving checkpoint.
+    Epoch [14/50], Train Losses: mse: 9.0934, mae: 2.2704, huber: 1.8255, swd: 0.4174, ept: 36.7048
+    Epoch [14/50], Val Losses: mse: 12.8876, mae: 2.8194, huber: 2.3612, swd: 1.5287, ept: 57.0684
+    Epoch [14/50], Test Losses: mse: 14.8843, mae: 2.9714, huber: 2.5142, swd: 1.2036, ept: 66.0667
+      Epoch 14 composite train-obj: 2.034197
+            No improvement (3.1255), counter 1/5
+    Epoch [15/50], Train Losses: mse: 8.8517, mae: 2.2341, huber: 1.7903, swd: 0.4071, ept: 37.4347
+    Epoch [15/50], Val Losses: mse: 13.1021, mae: 2.8519, huber: 2.3929, swd: 1.6000, ept: 57.9138
+    Epoch [15/50], Test Losses: mse: 14.5124, mae: 2.9369, huber: 2.4804, swd: 1.1836, ept: 68.4316
+      Epoch 15 composite train-obj: 1.993805
+            No improvement (3.1929), counter 2/5
+    Epoch [16/50], Train Losses: mse: 8.6244, mae: 2.2007, huber: 1.7578, swd: 0.3939, ept: 37.8509
+    Epoch [16/50], Val Losses: mse: 13.0812, mae: 2.8465, huber: 2.3879, swd: 1.6316, ept: 58.2715
+    Epoch [16/50], Test Losses: mse: 14.5167, mae: 2.9289, huber: 2.4728, swd: 1.2159, ept: 69.9953
+      Epoch 16 composite train-obj: 1.954729
+            No improvement (3.2037), counter 3/5
+    Epoch [17/50], Train Losses: mse: 8.4167, mae: 2.1697, huber: 1.7276, swd: 0.3844, ept: 38.4255
+    Epoch [17/50], Val Losses: mse: 12.9578, mae: 2.8328, huber: 2.3742, swd: 1.6548, ept: 57.8393
+    Epoch [17/50], Test Losses: mse: 14.6341, mae: 2.9340, huber: 2.4780, swd: 1.2245, ept: 71.9707
+      Epoch 17 composite train-obj: 1.919807
+            No improvement (3.2016), counter 4/5
+    Epoch [18/50], Train Losses: mse: 8.2384, mae: 2.1423, huber: 1.7011, swd: 0.3753, ept: 38.7163
+    Epoch [18/50], Val Losses: mse: 12.9039, mae: 2.8234, huber: 2.3654, swd: 1.6468, ept: 60.4216
+    Epoch [18/50], Test Losses: mse: 14.3680, mae: 2.9082, huber: 2.4522, swd: 1.2616, ept: 74.8740
+      Epoch 18 composite train-obj: 1.888734
+    Epoch [18/50], Test Losses: mse: 14.7219, mae: 2.9624, huber: 2.5051, swd: 1.2433, ept: 67.9366
+    Best round's Test MSE: 14.7219, MAE: 2.9624, SWD: 1.2433
+    Best round's Validation MSE: 12.8670, MAE: 2.8189, SWD: 1.5202
+    Best round's Test verification MSE : 14.7219, MAE: 2.9624, SWD: 1.2433
+    Time taken: 66.21 seconds
+    
+    ==================================================
+    Experiment Summary (PatchTST_lorenz96_seq336_pred336_20250512_2336)
+    ==================================================
+    Number of runs: 3
+    Seeds: [1955, 7, 20]
+    
+    Test Performance at Best Validation (mean ± std):
+      mse: 14.6964 ± 0.1355
+      mae: 2.9528 ± 0.0068
+      huber: 2.4960 ± 0.0065
+      swd: 1.2962 ± 0.0420
+      ept: 68.0328 ± 3.9869
+      count: 10.0000 ± 0.0000
+    
+    Corresponding Validation Performance (mean ± std):
+      mse: 13.1095 ± 0.2051
+      mae: 2.8455 ± 0.0190
+      huber: 2.3870 ± 0.0190
+      swd: 1.5438 ± 0.0293
+      ept: 58.9360 ± 3.2412
+      count: 10.0000 ± 0.0000
+    ==================================================
+    Three seeds Time taken: 205.98 seconds
+    
+    Experiment complete: PatchTST_lorenz96_seq336_pred336_20250512_2336
+    Model: PatchTST
+    Dataset: lorenz96
+    Sequence Length: 336
+    Prediction Length: 336
+    Seeds: [1955, 7, 20]
+    
+
+#### pred=720
+
+##### huber
+
+
+```python
+utils.reload_modules([utils])
+cfg = train_config.FlatPatchTSTConfig(
+    seq_len=336,
+    pred_len=720,
+    channels=data_mgr.datasets['lorenz96']['channels'],
+    enc_in=data_mgr.datasets['lorenz96']['channels'],
+    dec_in=data_mgr.datasets['lorenz96']['channels'],
+    c_out=data_mgr.datasets['lorenz96']['channels'],
+    batch_size=128,
+    learning_rate=9e-4,
+    seeds=[1955, 7, 20],
+    epochs=50,
+    task_name='long_term_forecast',
+    factor=3,
+)
+exp = execute_model_evaluation('lorenz96', cfg, data_mgr, scale=False)
+```
+
+    Reloading modules...
+      Reloaded: utils
+    Module reload complete.
+    Shape of training data: torch.Size([13300, 6])
+    Shape of validation data: torch.Size([1900, 6])
+    Shape of testing data: torch.Size([3800, 6])
+    global_std.shape: torch.Size([6])
+    Global Std for lorenz96: tensor([3.6750, 3.6678, 3.7240, 3.7347, 3.8038, 3.5588], device='cuda:0')
+    Train set sample shapes: torch.Size([336, 6]), torch.Size([720, 6])
+    Validation set sample shapes: torch.Size([336, 6]), torch.Size([720, 6])
+    Test set data shapes: torch.Size([3800, 6]), torch.Size([3800, 6])
+    Number of batches in train_loader: 96
+    Batch 0: Data shape torch.Size([128, 336, 6]), Target shape torch.Size([128, 720, 6])
+    
+    ==================================================
+    Data Preparation: lorenz96
+    ==================================================
+    Sequence Length: 336
+    Prediction Length: 720
+    Batch Size: 128
+    Scaling: No
+    Train Split: 0.7
+    Val Split: 0.8
+    Training Batches: 96
+    Validation Batches: 7
+    Test Batches: 22
+    ==================================================
+    
+    ==================================================
+     Running experiment with seed 1955 (1/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 14.9409, mae: 3.1053, huber: 2.6388, swd: 2.6905, ept: 23.8346
+    Epoch [1/50], Val Losses: mse: 14.9647, mae: 3.0988, huber: 2.6335, swd: 3.1607, ept: 59.5871
+    Epoch [1/50], Test Losses: mse: 15.6187, mae: 3.1643, huber: 2.6983, swd: 3.1865, ept: 58.2061
+      Epoch 1 composite train-obj: 2.638794
+            Val objective improved inf → 2.6335, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 13.1406, mae: 2.8957, huber: 2.4328, swd: 2.4819, ept: 31.9515
+    Epoch [2/50], Val Losses: mse: 14.8427, mae: 3.0930, huber: 2.6270, swd: 2.9541, ept: 60.6767
+    Epoch [2/50], Test Losses: mse: 15.2653, mae: 3.1192, huber: 2.6547, swd: 3.0574, ept: 64.3726
+      Epoch 2 composite train-obj: 2.432810
+            Val objective improved 2.6335 → 2.6270, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 12.4347, mae: 2.7972, huber: 2.3367, swd: 2.2172, ept: 34.2643
+    Epoch [3/50], Val Losses: mse: 15.0397, mae: 3.1214, huber: 2.6551, swd: 2.2972, ept: 62.8261
+    Epoch [3/50], Test Losses: mse: 15.6988, mae: 3.1470, huber: 2.6826, swd: 2.0902, ept: 67.2879
+      Epoch 3 composite train-obj: 2.336701
+            No improvement (2.6551), counter 1/5
+    Epoch [4/50], Train Losses: mse: 11.8341, mae: 2.7089, huber: 2.2508, swd: 1.9909, ept: 36.0243
+    Epoch [4/50], Val Losses: mse: 14.9974, mae: 3.0916, huber: 2.6266, swd: 2.3502, ept: 66.9231
+    Epoch [4/50], Test Losses: mse: 15.5804, mae: 3.1408, huber: 2.6759, swd: 2.1710, ept: 69.7237
+      Epoch 4 composite train-obj: 2.250757
+            Val objective improved 2.6270 → 2.6266, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 11.2534, mae: 2.6260, huber: 2.1699, swd: 1.8391, ept: 37.5486
+    Epoch [5/50], Val Losses: mse: 14.8740, mae: 3.0812, huber: 2.6173, swd: 2.5474, ept: 71.2574
+    Epoch [5/50], Test Losses: mse: 15.3466, mae: 3.1050, huber: 2.6415, swd: 2.4271, ept: 75.1674
+      Epoch 5 composite train-obj: 2.169908
+            Val objective improved 2.6266 → 2.6173, saving checkpoint.
+    Epoch [6/50], Train Losses: mse: 10.7265, mae: 2.5492, huber: 2.0952, swd: 1.7157, ept: 38.7921
+    Epoch [6/50], Val Losses: mse: 14.8180, mae: 3.0846, huber: 2.6199, swd: 2.5117, ept: 73.9438
+    Epoch [6/50], Test Losses: mse: 15.5651, mae: 3.1197, huber: 2.6562, swd: 2.4436, ept: 79.2442
+      Epoch 6 composite train-obj: 2.095179
+            No improvement (2.6199), counter 1/5
+    Epoch [7/50], Train Losses: mse: 10.2685, mae: 2.4812, huber: 2.0290, swd: 1.6110, ept: 39.9548
+    Epoch [7/50], Val Losses: mse: 14.9052, mae: 3.0905, huber: 2.6258, swd: 2.1645, ept: 73.9950
+    Epoch [7/50], Test Losses: mse: 15.5182, mae: 3.0967, huber: 2.6343, swd: 2.0003, ept: 82.4192
+      Epoch 7 composite train-obj: 2.029018
+            No improvement (2.6258), counter 2/5
+    Epoch [8/50], Train Losses: mse: 9.8622, mae: 2.4204, huber: 1.9699, swd: 1.5209, ept: 40.7311
+    Epoch [8/50], Val Losses: mse: 15.2921, mae: 3.1194, huber: 2.6546, swd: 2.1226, ept: 72.3690
+    Epoch [8/50], Test Losses: mse: 15.8380, mae: 3.1318, huber: 2.6688, swd: 1.9980, ept: 83.0010
+      Epoch 8 composite train-obj: 1.969920
+            No improvement (2.6546), counter 3/5
+    Epoch [9/50], Train Losses: mse: 9.4911, mae: 2.3646, huber: 1.9157, swd: 1.4404, ept: 41.4589
+    Epoch [9/50], Val Losses: mse: 15.1857, mae: 3.1116, huber: 2.6464, swd: 1.8673, ept: 73.4688
+    Epoch [9/50], Test Losses: mse: 15.7116, mae: 3.1069, huber: 2.6448, swd: 1.7353, ept: 90.3535
+      Epoch 9 composite train-obj: 1.915652
+            No improvement (2.6464), counter 4/5
+    Epoch [10/50], Train Losses: mse: 9.1803, mae: 2.3185, huber: 1.8708, swd: 1.3712, ept: 41.9570
+    Epoch [10/50], Val Losses: mse: 15.2422, mae: 3.1030, huber: 2.6389, swd: 1.9556, ept: 74.1433
+    Epoch [10/50], Test Losses: mse: 15.9487, mae: 3.1268, huber: 2.6650, swd: 1.8675, ept: 89.4275
+      Epoch 10 composite train-obj: 1.870790
+    Epoch [10/50], Test Losses: mse: 15.3466, mae: 3.1050, huber: 2.6415, swd: 2.4271, ept: 75.1674
+    Best round's Test MSE: 15.3466, MAE: 3.1050, SWD: 2.4271
+    Best round's Validation MSE: 14.8740, MAE: 3.0812, SWD: 2.5474
+    Best round's Test verification MSE : 15.3466, MAE: 3.1050, SWD: 2.4271
+    Time taken: 39.82 seconds
+    
+    ==================================================
+     Running experiment with seed 7 (2/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 14.8767, mae: 3.0975, huber: 2.6312, swd: 2.6615, ept: 23.8697
+    Epoch [1/50], Val Losses: mse: 15.8416, mae: 3.2048, huber: 2.7378, swd: 2.8663, ept: 54.7279
+    Epoch [1/50], Test Losses: mse: 14.9250, mae: 3.0891, huber: 2.6240, swd: 2.7000, ept: 57.7706
+      Epoch 1 composite train-obj: 2.631235
+            Val objective improved inf → 2.7378, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 13.1327, mae: 2.8953, huber: 2.4325, swd: 2.4414, ept: 31.8400
+    Epoch [2/50], Val Losses: mse: 15.0294, mae: 3.1182, huber: 2.6515, swd: 3.1383, ept: 63.5315
+    Epoch [2/50], Test Losses: mse: 15.1367, mae: 3.1041, huber: 2.6396, swd: 3.0448, ept: 64.7706
+      Epoch 2 composite train-obj: 2.432484
+            Val objective improved 2.7378 → 2.6515, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 12.2813, mae: 2.7761, huber: 2.3160, swd: 2.1304, ept: 34.3439
+    Epoch [3/50], Val Losses: mse: 14.9849, mae: 3.0948, huber: 2.6298, swd: 2.7638, ept: 67.8911
+    Epoch [3/50], Test Losses: mse: 15.1583, mae: 3.1013, huber: 2.6369, swd: 2.6973, ept: 70.7723
+      Epoch 3 composite train-obj: 2.316023
+            Val objective improved 2.6515 → 2.6298, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 11.5365, mae: 2.6689, huber: 2.2115, swd: 1.9035, ept: 36.1833
+    Epoch [4/50], Val Losses: mse: 14.2139, mae: 3.0263, huber: 2.5616, swd: 2.7206, ept: 67.8310
+    Epoch [4/50], Test Losses: mse: 15.1039, mae: 3.0807, huber: 2.6169, swd: 2.5926, ept: 78.3082
+      Epoch 4 composite train-obj: 2.211528
+            Val objective improved 2.6298 → 2.5616, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 10.9424, mae: 2.5826, huber: 2.1276, swd: 1.7458, ept: 38.1815
+    Epoch [5/50], Val Losses: mse: 14.4776, mae: 3.0417, huber: 2.5771, swd: 2.2519, ept: 70.3696
+    Epoch [5/50], Test Losses: mse: 15.4101, mae: 3.0980, huber: 2.6350, swd: 2.0202, ept: 78.2339
+      Epoch 5 composite train-obj: 2.127609
+            No improvement (2.5771), counter 1/5
+    Epoch [6/50], Train Losses: mse: 10.3681, mae: 2.4979, huber: 2.0452, swd: 1.6172, ept: 39.4836
+    Epoch [6/50], Val Losses: mse: 14.5317, mae: 3.0483, huber: 2.5842, swd: 2.2755, ept: 73.4558
+    Epoch [6/50], Test Losses: mse: 15.4580, mae: 3.0953, huber: 2.6331, swd: 2.0887, ept: 82.5049
+      Epoch 6 composite train-obj: 2.045191
+            No improvement (2.5842), counter 2/5
+    Epoch [7/50], Train Losses: mse: 9.8999, mae: 2.4286, huber: 1.9777, swd: 1.5040, ept: 40.4574
+    Epoch [7/50], Val Losses: mse: 14.7109, mae: 3.0558, huber: 2.5920, swd: 2.2388, ept: 71.0175
+    Epoch [7/50], Test Losses: mse: 15.6542, mae: 3.1100, huber: 2.6475, swd: 2.1163, ept: 86.3154
+      Epoch 7 composite train-obj: 1.977744
+            No improvement (2.5920), counter 3/5
+    Epoch [8/50], Train Losses: mse: 9.4836, mae: 2.3660, huber: 1.9168, swd: 1.4230, ept: 41.3084
+    Epoch [8/50], Val Losses: mse: 14.6135, mae: 3.0433, huber: 2.5794, swd: 1.9651, ept: 73.9933
+    Epoch [8/50], Test Losses: mse: 15.7027, mae: 3.1129, huber: 2.6507, swd: 1.8908, ept: 90.0874
+      Epoch 8 composite train-obj: 1.916844
+            No improvement (2.5794), counter 4/5
+    Epoch [9/50], Train Losses: mse: 9.1262, mae: 2.3125, huber: 1.8649, swd: 1.3443, ept: 41.8130
+    Epoch [9/50], Val Losses: mse: 15.0104, mae: 3.0818, huber: 2.6180, swd: 2.1557, ept: 76.0719
+    Epoch [9/50], Test Losses: mse: 15.7335, mae: 3.1039, huber: 2.6427, swd: 2.0100, ept: 92.6452
+      Epoch 9 composite train-obj: 1.864880
+    Epoch [9/50], Test Losses: mse: 15.1039, mae: 3.0807, huber: 2.6169, swd: 2.5926, ept: 78.3082
+    Best round's Test MSE: 15.1039, MAE: 3.0807, SWD: 2.5926
+    Best round's Validation MSE: 14.2139, MAE: 3.0263, SWD: 2.7206
+    Best round's Test verification MSE : 15.1039, MAE: 3.0807, SWD: 2.5926
+    Time taken: 35.58 seconds
+    
+    ==================================================
+     Running experiment with seed 20 (3/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 14.8114, mae: 3.0916, huber: 2.6254, swd: 2.7237, ept: 24.0173
+    Epoch [1/50], Val Losses: mse: 15.2234, mae: 3.1308, huber: 2.6641, swd: 3.6351, ept: 52.3191
+    Epoch [1/50], Test Losses: mse: 15.7004, mae: 3.1737, huber: 2.7079, swd: 3.5016, ept: 55.8364
+      Epoch 1 composite train-obj: 2.625376
+            Val objective improved inf → 2.6641, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 13.0729, mae: 2.8872, huber: 2.4246, swd: 2.4653, ept: 32.0846
+    Epoch [2/50], Val Losses: mse: 15.1827, mae: 3.1314, huber: 2.6649, swd: 2.4068, ept: 64.6672
+    Epoch [2/50], Test Losses: mse: 15.2915, mae: 3.1146, huber: 2.6495, swd: 2.1681, ept: 63.6611
+      Epoch 2 composite train-obj: 2.424553
+            No improvement (2.6649), counter 1/5
+    Epoch [3/50], Train Losses: mse: 12.3367, mae: 2.7847, huber: 2.3245, swd: 2.1778, ept: 34.6199
+    Epoch [3/50], Val Losses: mse: 15.0329, mae: 3.1190, huber: 2.6529, swd: 2.3920, ept: 63.9298
+    Epoch [3/50], Test Losses: mse: 15.1769, mae: 3.0944, huber: 2.6301, swd: 2.1417, ept: 68.9852
+      Epoch 3 composite train-obj: 2.324496
+            Val objective improved 2.6641 → 2.6529, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 11.6686, mae: 2.6889, huber: 2.2312, swd: 1.9909, ept: 36.3169
+    Epoch [4/50], Val Losses: mse: 14.6763, mae: 3.0691, huber: 2.6051, swd: 2.7562, ept: 70.9060
+    Epoch [4/50], Test Losses: mse: 15.1616, mae: 3.0939, huber: 2.6301, swd: 2.5063, ept: 73.0213
+      Epoch 4 composite train-obj: 2.231203
+            Val objective improved 2.6529 → 2.6051, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 11.1036, mae: 2.6067, huber: 2.1511, swd: 1.8362, ept: 37.8489
+    Epoch [5/50], Val Losses: mse: 14.7137, mae: 3.0730, huber: 2.6084, swd: 2.3688, ept: 72.6804
+    Epoch [5/50], Test Losses: mse: 15.4610, mae: 3.1115, huber: 2.6483, swd: 2.0359, ept: 79.2982
+      Epoch 5 composite train-obj: 2.151114
+            No improvement (2.6084), counter 1/5
+    Epoch [6/50], Train Losses: mse: 10.5927, mae: 2.5311, huber: 2.0776, swd: 1.7252, ept: 39.6023
+    Epoch [6/50], Val Losses: mse: 14.8499, mae: 3.0746, huber: 2.6106, swd: 2.5153, ept: 77.2822
+    Epoch [6/50], Test Losses: mse: 15.2981, mae: 3.0829, huber: 2.6208, swd: 2.1628, ept: 82.4456
+      Epoch 6 composite train-obj: 2.077570
+            No improvement (2.6106), counter 2/5
+    Epoch [7/50], Train Losses: mse: 10.1476, mae: 2.4640, huber: 2.0123, swd: 1.6230, ept: 40.6497
+    Epoch [7/50], Val Losses: mse: 14.9888, mae: 3.0853, huber: 2.6216, swd: 2.6093, ept: 75.6695
+    Epoch [7/50], Test Losses: mse: 15.4078, mae: 3.0865, huber: 2.6248, swd: 2.2215, ept: 84.5864
+      Epoch 7 composite train-obj: 2.012309
+            No improvement (2.6216), counter 3/5
+    Epoch [8/50], Train Losses: mse: 9.7647, mae: 2.4067, huber: 1.9566, swd: 1.5336, ept: 41.4274
+    Epoch [8/50], Val Losses: mse: 14.8075, mae: 3.0675, huber: 2.6037, swd: 2.5588, ept: 79.8500
+    Epoch [8/50], Test Losses: mse: 15.4579, mae: 3.0878, huber: 2.6254, swd: 2.1878, ept: 86.7886
+      Epoch 8 composite train-obj: 1.956622
+            Val objective improved 2.6051 → 2.6037, saving checkpoint.
+    Epoch [9/50], Train Losses: mse: 9.4307, mae: 2.3570, huber: 1.9082, swd: 1.4586, ept: 41.9385
+    Epoch [9/50], Val Losses: mse: 15.0896, mae: 3.0913, huber: 2.6273, swd: 2.2481, ept: 77.5902
+    Epoch [9/50], Test Losses: mse: 15.3831, mae: 3.0688, huber: 2.6074, swd: 1.9252, ept: 88.7151
+      Epoch 9 composite train-obj: 1.908231
+            No improvement (2.6273), counter 1/5
+    Epoch [10/50], Train Losses: mse: 9.1259, mae: 2.3105, huber: 1.8630, swd: 1.3891, ept: 42.3910
+    Epoch [10/50], Val Losses: mse: 14.9244, mae: 3.0805, huber: 2.6167, swd: 2.3426, ept: 76.7251
+    Epoch [10/50], Test Losses: mse: 15.3215, mae: 3.0536, huber: 2.5931, swd: 2.0017, ept: 93.0112
+      Epoch 10 composite train-obj: 1.863014
+            No improvement (2.6167), counter 2/5
+    Epoch [11/50], Train Losses: mse: 8.8442, mae: 2.2683, huber: 1.8220, swd: 1.3437, ept: 42.9817
+    Epoch [11/50], Val Losses: mse: 15.0576, mae: 3.0797, huber: 2.6156, swd: 2.1800, ept: 81.3272
+    Epoch [11/50], Test Losses: mse: 15.6669, mae: 3.0921, huber: 2.6304, swd: 1.8699, ept: 92.0593
+      Epoch 11 composite train-obj: 1.822029
+            No improvement (2.6156), counter 3/5
+    Epoch [12/50], Train Losses: mse: 8.6174, mae: 2.2327, huber: 1.7875, swd: 1.2905, ept: 43.2027
+    Epoch [12/50], Val Losses: mse: 15.2285, mae: 3.1001, huber: 2.6358, swd: 2.1963, ept: 80.0824
+    Epoch [12/50], Test Losses: mse: 15.7440, mae: 3.0948, huber: 2.6338, swd: 1.9485, ept: 93.2076
+      Epoch 12 composite train-obj: 1.787503
+            No improvement (2.6358), counter 4/5
+    Epoch [13/50], Train Losses: mse: 8.4098, mae: 2.2012, huber: 1.7569, swd: 1.2456, ept: 43.4646
+    Epoch [13/50], Val Losses: mse: 15.1248, mae: 3.0898, huber: 2.6257, swd: 2.1563, ept: 79.4490
+    Epoch [13/50], Test Losses: mse: 15.6650, mae: 3.0840, huber: 2.6235, swd: 1.9094, ept: 96.0629
+      Epoch 13 composite train-obj: 1.756906
+    Epoch [13/50], Test Losses: mse: 15.4579, mae: 3.0878, huber: 2.6254, swd: 2.1878, ept: 86.7886
+    Best round's Test MSE: 15.4579, MAE: 3.0878, SWD: 2.1878
+    Best round's Validation MSE: 14.8075, MAE: 3.0675, SWD: 2.5588
+    Best round's Test verification MSE : 15.4579, MAE: 3.0878, SWD: 2.1878
+    Time taken: 50.67 seconds
+    
+    ==================================================
+    Experiment Summary (PatchTST_lorenz96_seq336_pred720_20250512_2210)
+    ==================================================
+    Number of runs: 3
+    Seeds: [1955, 7, 20]
+    
+    Test Performance at Best Validation (mean ± std):
+      mse: 15.3028 ± 0.1478
+      mae: 3.0912 ± 0.0102
+      huber: 2.6279 ± 0.0102
+      swd: 2.4025 ± 0.1661
+      ept: 80.0881 ± 4.9084
+      count: 7.0000 ± 0.0000
+    
+    Corresponding Validation Performance (mean ± std):
+      mse: 14.6318 ± 0.2968
+      mae: 3.0583 ± 0.0233
+      huber: 2.5942 ± 0.0237
+      swd: 2.6089 ± 0.0791
+      ept: 72.9794 ± 5.0556
+      count: 7.0000 ± 0.0000
+    ==================================================
+    Three seeds Time taken: 126.22 seconds
+    
+    Experiment complete: PatchTST_lorenz96_seq336_pred720_20250512_2210
+    Model: PatchTST
+    Dataset: lorenz96
+    Sequence Length: 336
+    Prediction Length: 720
+    Seeds: [1955, 7, 20]
+    
+
+##### huber + 0.5
+
+
+
+```python
+utils.reload_modules([utils])
+cfg = train_config.FlatTimeMixerConfig(
+    seq_len=336,
+    pred_len=720,
+    channels=data_mgr.datasets['lorenz96']['channels'],
+    enc_in=data_mgr.datasets['lorenz96']['channels'],
+    dec_in=data_mgr.datasets['lorenz96']['channels'],
+    c_out=data_mgr.datasets['lorenz96']['channels'],
+    batch_size=128,
+    learning_rate=9e-4,
+    seeds=[1955, 7, 20],
+    epochs=50, 
+    loss_backward_weights = [0.0, 0.0, 1.0, 0.5, 0.0],
+    loss_validate_weights = [0.0, 0.0, 1.0, 0.5, 0.0],
+)
+exp = execute_model_evaluation('lorenz96', cfg, data_mgr, scale=False)
+
+```
+
+    Reloading modules...
+      Reloaded: utils
+    Module reload complete.
+    Shape of training data: torch.Size([13300, 6])
+    Shape of validation data: torch.Size([1900, 6])
+    Shape of testing data: torch.Size([3800, 6])
+    global_std.shape: torch.Size([6])
+    Global Std for lorenz96: tensor([3.6750, 3.6678, 3.7240, 3.7347, 3.8038, 3.5588], device='cuda:0')
+    Train set sample shapes: torch.Size([336, 6]), torch.Size([720, 6])
+    Validation set sample shapes: torch.Size([336, 6]), torch.Size([720, 6])
+    Test set data shapes: torch.Size([3800, 6]), torch.Size([3800, 6])
+    Number of batches in train_loader: 96
+    Batch 0: Data shape torch.Size([128, 336, 6]), Target shape torch.Size([128, 720, 6])
+    
+    ==================================================
+    Data Preparation: lorenz96
+    ==================================================
+    Sequence Length: 336
+    Prediction Length: 720
+    Batch Size: 128
+    Scaling: No
+    Train Split: 0.7
+    Val Split: 0.8
+    Training Batches: 96
+    Validation Batches: 7
+    Test Batches: 22
+    ==================================================
+    
+    ==================================================
+     Running experiment with seed 1955 (1/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 15.9996, mae: 3.2050, huber: 2.7375, swd: 0.9287, ept: 20.3205
+    Epoch [1/50], Val Losses: mse: 15.6901, mae: 3.1864, huber: 2.7187, swd: 1.2255, ept: 36.3660
+    Epoch [1/50], Test Losses: mse: 16.8083, mae: 3.2752, huber: 2.8080, swd: 1.0211, ept: 36.4500
+      Epoch 1 composite train-obj: 3.201899
+            Val objective improved inf → 3.3315, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 13.4262, mae: 2.9115, huber: 2.4489, swd: 0.5462, ept: 45.1551
+    Epoch [2/50], Val Losses: mse: 15.4625, mae: 3.1487, huber: 2.6823, swd: 1.2438, ept: 46.8354
+    Epoch [2/50], Test Losses: mse: 16.3027, mae: 3.2126, huber: 2.7467, swd: 0.8844, ept: 46.0263
+      Epoch 2 composite train-obj: 2.721998
+            Val objective improved 3.3315 → 3.3042, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 12.6222, mae: 2.8001, huber: 2.3401, swd: 0.4359, ept: 55.3393
+    Epoch [3/50], Val Losses: mse: 15.4924, mae: 3.1384, huber: 2.6729, swd: 1.2141, ept: 48.9112
+    Epoch [3/50], Test Losses: mse: 16.5428, mae: 3.2319, huber: 2.7662, swd: 0.8247, ept: 49.3384
+      Epoch 3 composite train-obj: 2.557995
+            Val objective improved 3.3042 → 3.2800, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 11.9690, mae: 2.7073, huber: 2.2496, swd: 0.3596, ept: 62.5950
+    Epoch [4/50], Val Losses: mse: 15.6231, mae: 3.1485, huber: 2.6826, swd: 1.2017, ept: 48.2326
+    Epoch [4/50], Test Losses: mse: 16.4466, mae: 3.2119, huber: 2.7467, swd: 0.7859, ept: 51.6110
+      Epoch 4 composite train-obj: 2.429403
+            No improvement (3.2835), counter 1/5
+    Epoch [5/50], Train Losses: mse: 11.3381, mae: 2.6159, huber: 2.1606, swd: 0.2993, ept: 69.7000
+    Epoch [5/50], Val Losses: mse: 15.6220, mae: 3.1482, huber: 2.6827, swd: 1.2351, ept: 50.8123
+    Epoch [5/50], Test Losses: mse: 16.4116, mae: 3.2000, huber: 2.7352, swd: 0.8518, ept: 55.0504
+      Epoch 5 composite train-obj: 2.310267
+            No improvement (3.3002), counter 2/5
+    Epoch [6/50], Train Losses: mse: 10.6861, mae: 2.5191, huber: 2.0665, swd: 0.2557, ept: 77.1071
+    Epoch [6/50], Val Losses: mse: 15.8301, mae: 3.1584, huber: 2.6928, swd: 1.1656, ept: 52.4179
+    Epoch [6/50], Test Losses: mse: 16.8878, mae: 3.2374, huber: 2.7726, swd: 0.8422, ept: 57.5240
+      Epoch 6 composite train-obj: 2.194370
+            Val objective improved 3.2800 → 3.2756, saving checkpoint.
+    Epoch [7/50], Train Losses: mse: 9.9585, mae: 2.4098, huber: 1.9603, swd: 0.2237, ept: 84.2597
+    Epoch [7/50], Val Losses: mse: 16.1669, mae: 3.1849, huber: 2.7194, swd: 1.2919, ept: 52.3584
+    Epoch [7/50], Test Losses: mse: 17.1654, mae: 3.2611, huber: 2.7963, swd: 0.8378, ept: 58.8707
+      Epoch 7 composite train-obj: 2.072208
+            No improvement (3.3654), counter 1/5
+    Epoch [8/50], Train Losses: mse: 9.1368, mae: 2.2866, huber: 1.8407, swd: 0.2014, ept: 92.8735
+    Epoch [8/50], Val Losses: mse: 16.7496, mae: 3.2427, huber: 2.7764, swd: 1.2916, ept: 50.7416
+    Epoch [8/50], Test Losses: mse: 17.2820, mae: 3.2626, huber: 2.7981, swd: 0.8728, ept: 61.0516
+      Epoch 8 composite train-obj: 1.941397
+            No improvement (3.4222), counter 2/5
+    Epoch [9/50], Train Losses: mse: 8.2781, mae: 2.1570, huber: 1.7148, swd: 0.1857, ept: 102.8173
+    Epoch [9/50], Val Losses: mse: 17.3146, mae: 3.3040, huber: 2.8372, swd: 1.3161, ept: 51.9791
+    Epoch [9/50], Test Losses: mse: 17.3696, mae: 3.2668, huber: 2.8025, swd: 0.9435, ept: 63.2296
+      Epoch 9 composite train-obj: 1.807655
+            No improvement (3.4952), counter 3/5
+    Epoch [10/50], Train Losses: mse: 7.4029, mae: 2.0219, huber: 1.5838, swd: 0.1731, ept: 115.9711
+    Epoch [10/50], Val Losses: mse: 18.0852, mae: 3.3702, huber: 2.9028, swd: 1.3483, ept: 51.7473
+    Epoch [10/50], Test Losses: mse: 17.9583, mae: 3.3174, huber: 2.8528, swd: 0.9423, ept: 64.3959
+      Epoch 10 composite train-obj: 1.670328
+            No improvement (3.5770), counter 4/5
+    Epoch [11/50], Train Losses: mse: 6.5959, mae: 1.8946, huber: 1.4606, swd: 0.1649, ept: 132.3678
+    Epoch [11/50], Val Losses: mse: 18.6700, mae: 3.4325, huber: 2.9644, swd: 1.3673, ept: 52.0251
+    Epoch [11/50], Test Losses: mse: 18.4594, mae: 3.3614, huber: 2.8966, swd: 0.9780, ept: 67.8514
+      Epoch 11 composite train-obj: 1.543061
+    Epoch [11/50], Test Losses: mse: 16.8878, mae: 3.2374, huber: 2.7726, swd: 0.8422, ept: 57.5240
+    Best round's Test MSE: 16.8878, MAE: 3.2374, SWD: 0.8422
+    Best round's Validation MSE: 15.8301, MAE: 3.1584, SWD: 1.1656
+    Best round's Test verification MSE : 16.8878, MAE: 3.2374, SWD: 0.8422
+    Time taken: 63.74 seconds
+    
+    ==================================================
+     Running experiment with seed 7 (2/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 15.4158, mae: 3.1481, huber: 2.6813, swd: 0.7301, ept: 21.5332
+    Epoch [1/50], Val Losses: mse: 15.7214, mae: 3.1846, huber: 2.7173, swd: 1.1813, ept: 38.7302
+    Epoch [1/50], Test Losses: mse: 16.5472, mae: 3.2515, huber: 2.7844, swd: 0.9690, ept: 38.0100
+      Epoch 1 composite train-obj: 3.046383
+            Val objective improved inf → 3.3080, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 13.1330, mae: 2.8674, huber: 2.4058, swd: 0.4427, ept: 46.3707
+    Epoch [2/50], Val Losses: mse: 15.4636, mae: 3.1445, huber: 2.6782, swd: 1.0932, ept: 47.0528
+    Epoch [2/50], Test Losses: mse: 16.2649, mae: 3.2087, huber: 2.7428, swd: 0.7587, ept: 45.5273
+      Epoch 2 composite train-obj: 2.627109
+            Val objective improved 3.3080 → 3.2248, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 12.1450, mae: 2.7296, huber: 2.2713, swd: 0.3313, ept: 57.6579
+    Epoch [3/50], Val Losses: mse: 15.4782, mae: 3.1436, huber: 2.6775, swd: 1.1366, ept: 51.6879
+    Epoch [3/50], Test Losses: mse: 16.4913, mae: 3.2210, huber: 2.7555, swd: 0.7598, ept: 51.1705
+      Epoch 3 composite train-obj: 2.436927
+            No improvement (3.2458), counter 1/5
+    Epoch [4/50], Train Losses: mse: 11.3329, mae: 2.6099, huber: 2.1549, swd: 0.2672, ept: 67.7820
+    Epoch [4/50], Val Losses: mse: 15.8539, mae: 3.1788, huber: 2.7122, swd: 1.2083, ept: 49.9181
+    Epoch [4/50], Test Losses: mse: 16.6350, mae: 3.2183, huber: 2.7535, swd: 0.7484, ept: 53.1449
+      Epoch 4 composite train-obj: 2.288513
+            No improvement (3.3164), counter 2/5
+    Epoch [5/50], Train Losses: mse: 10.5072, mae: 2.4877, huber: 2.0360, swd: 0.2276, ept: 77.6736
+    Epoch [5/50], Val Losses: mse: 15.7664, mae: 3.1662, huber: 2.6999, swd: 1.2017, ept: 50.5315
+    Epoch [5/50], Test Losses: mse: 16.8605, mae: 3.2311, huber: 2.7666, swd: 0.7709, ept: 57.1444
+      Epoch 5 composite train-obj: 2.149840
+            No improvement (3.3007), counter 3/5
+    Epoch [6/50], Train Losses: mse: 9.5671, mae: 2.3478, huber: 1.9001, swd: 0.1927, ept: 88.2755
+    Epoch [6/50], Val Losses: mse: 16.1691, mae: 3.2016, huber: 2.7351, swd: 1.2084, ept: 50.0275
+    Epoch [6/50], Test Losses: mse: 17.3986, mae: 3.2744, huber: 2.8095, swd: 0.8018, ept: 58.6099
+      Epoch 6 composite train-obj: 1.996484
+            No improvement (3.3393), counter 4/5
+    Epoch [7/50], Train Losses: mse: 8.5957, mae: 2.2026, huber: 1.7591, swd: 0.1767, ept: 100.0149
+    Epoch [7/50], Val Losses: mse: 16.5654, mae: 3.2454, huber: 2.7783, swd: 1.1881, ept: 51.0480
+    Epoch [7/50], Test Losses: mse: 17.5198, mae: 3.2801, huber: 2.8157, swd: 0.8135, ept: 61.8945
+      Epoch 7 composite train-obj: 1.847442
+    Epoch [7/50], Test Losses: mse: 16.2649, mae: 3.2087, huber: 2.7428, swd: 0.7587, ept: 45.5273
+    Best round's Test MSE: 16.2649, MAE: 3.2087, SWD: 0.7587
+    Best round's Validation MSE: 15.4636, MAE: 3.1445, SWD: 1.0932
+    Best round's Test verification MSE : 16.2649, MAE: 3.2087, SWD: 0.7587
+    Time taken: 40.68 seconds
+    
+    ==================================================
+     Running experiment with seed 20 (3/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 16.5059, mae: 3.2769, huber: 2.8081, swd: 1.0557, ept: 11.8591
+    Epoch [1/50], Val Losses: mse: 15.5756, mae: 3.1840, huber: 2.7163, swd: 1.3235, ept: 27.7097
+    Epoch [1/50], Test Losses: mse: 16.2318, mae: 3.2307, huber: 2.7631, swd: 1.1697, ept: 26.4243
+      Epoch 1 composite train-obj: 3.335926
+            Val objective improved inf → 3.3780, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 13.7531, mae: 2.9581, huber: 2.4940, swd: 0.6026, ept: 32.2797
+    Epoch [2/50], Val Losses: mse: 15.3597, mae: 3.1488, huber: 2.6821, swd: 1.2770, ept: 39.2966
+    Epoch [2/50], Test Losses: mse: 16.2025, mae: 3.2068, huber: 2.7405, swd: 0.9512, ept: 39.0179
+      Epoch 2 composite train-obj: 2.795285
+            Val objective improved 3.3780 → 3.3206, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 12.8327, mae: 2.8298, huber: 2.3688, swd: 0.4695, ept: 45.6991
+    Epoch [3/50], Val Losses: mse: 15.3202, mae: 3.1362, huber: 2.6698, swd: 1.2059, ept: 44.9762
+    Epoch [3/50], Test Losses: mse: 16.2768, mae: 3.2138, huber: 2.7479, swd: 0.9084, ept: 45.0412
+      Epoch 3 composite train-obj: 2.603561
+            Val objective improved 3.3206 → 3.2727, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 12.1965, mae: 2.7376, huber: 2.2790, swd: 0.3858, ept: 54.4933
+    Epoch [4/50], Val Losses: mse: 15.5357, mae: 3.1574, huber: 2.6908, swd: 1.1947, ept: 44.9971
+    Epoch [4/50], Test Losses: mse: 16.4428, mae: 3.2194, huber: 2.7538, swd: 0.8548, ept: 48.3170
+      Epoch 4 composite train-obj: 2.471931
+            No improvement (3.2881), counter 1/5
+    Epoch [5/50], Train Losses: mse: 11.6423, mae: 2.6561, huber: 2.1999, swd: 0.3369, ept: 62.6001
+    Epoch [5/50], Val Losses: mse: 15.6388, mae: 3.1671, huber: 2.7007, swd: 1.1992, ept: 46.1309
+    Epoch [5/50], Test Losses: mse: 16.4991, mae: 3.2167, huber: 2.7513, swd: 0.8370, ept: 52.3661
+      Epoch 5 composite train-obj: 2.368308
+            No improvement (3.3003), counter 2/5
+    Epoch [6/50], Train Losses: mse: 11.0794, mae: 2.5736, huber: 2.1198, swd: 0.2948, ept: 69.5659
+    Epoch [6/50], Val Losses: mse: 15.7915, mae: 3.1679, huber: 2.7019, swd: 1.2597, ept: 46.7515
+    Epoch [6/50], Test Losses: mse: 17.0082, mae: 3.2618, huber: 2.7962, swd: 0.8907, ept: 53.2909
+      Epoch 6 composite train-obj: 2.267147
+            No improvement (3.3317), counter 3/5
+    Epoch [7/50], Train Losses: mse: 10.4928, mae: 2.4858, huber: 2.0345, swd: 0.2590, ept: 77.1350
+    Epoch [7/50], Val Losses: mse: 15.8759, mae: 3.1770, huber: 2.7108, swd: 1.3221, ept: 48.9960
+    Epoch [7/50], Test Losses: mse: 17.0056, mae: 3.2575, huber: 2.7921, swd: 0.8895, ept: 56.9794
+      Epoch 7 composite train-obj: 2.164026
+            No improvement (3.3718), counter 4/5
+    Epoch [8/50], Train Losses: mse: 9.8724, mae: 2.3929, huber: 1.9444, swd: 0.2391, ept: 84.0859
+    Epoch [8/50], Val Losses: mse: 16.3447, mae: 3.2276, huber: 2.7606, swd: 1.2655, ept: 47.1547
+    Epoch [8/50], Test Losses: mse: 17.3234, mae: 3.2760, huber: 2.8110, swd: 0.8566, ept: 57.7786
+      Epoch 8 composite train-obj: 2.063936
+    Epoch [8/50], Test Losses: mse: 16.2768, mae: 3.2138, huber: 2.7479, swd: 0.9084, ept: 45.0412
+    Best round's Test MSE: 16.2768, MAE: 3.2138, SWD: 0.9084
+    Best round's Validation MSE: 15.3202, MAE: 3.1362, SWD: 1.2059
+    Best round's Test verification MSE : 16.2768, MAE: 3.2138, SWD: 0.9084
+    Time taken: 48.97 seconds
+    
+    ==================================================
+    Experiment Summary (TimeMixer_lorenz96_seq336_pred720_20250513_0010)
+    ==================================================
+    Number of runs: 3
+    Seeds: [1955, 7, 20]
+    
+    Test Performance at Best Validation (mean ± std):
+      mse: 16.4765 ± 0.2909
+      mae: 3.2200 ± 0.0125
+      huber: 2.7545 ± 0.0130
+      swd: 0.8365 ± 0.0613
+      ept: 49.3642 ± 5.7733
+      count: 7.0000 ± 0.0000
+    
+    Corresponding Validation Performance (mean ± std):
+      mse: 15.5380 ± 0.2147
+      mae: 3.1464 ± 0.0092
+      huber: 2.6803 ± 0.0095
+      swd: 1.1549 ± 0.0466
+      ept: 48.1490 ± 3.1354
+      count: 7.0000 ± 0.0000
+    ==================================================
+    Three seeds Time taken: 153.45 seconds
+    
+    Experiment complete: TimeMixer_lorenz96_seq336_pred720_20250513_0010
+    Model: TimeMixer
+    Dataset: lorenz96
+    Sequence Length: 336
+    Prediction Length: 720
+    Seeds: [1955, 7, 20]
+    
+
+### DLinear
+
+#### pred=96
+
+
+```python
+importlib.reload(monotonic)
+importlib.reload(train_config)
+utils.reload_modules([utils])
+cfg = train_config.FlatDLinearConfig(
+    seq_len=336,
+    pred_len=96,
+    channels=data_mgr.datasets['lorenz96']['channels'],
+    batch_size=128,
+    learning_rate=9e-4,
+    seeds=[1955, 7, 20],
+    epochs=50, 
+)
+exp = execute_model_evaluation('lorenz96', cfg, data_mgr, scale=False)
+```
+
+    Reloading modules...
+      Reloaded: utils
+    Module reload complete.
+    Shape of training data: torch.Size([13300, 6])
+    Shape of validation data: torch.Size([1900, 6])
+    Shape of testing data: torch.Size([3800, 6])
+    global_std.shape: torch.Size([6])
+    Global Std for lorenz96: tensor([3.6750, 3.6678, 3.7240, 3.7347, 3.8038, 3.5588], device='cuda:0')
+    Train set sample shapes: torch.Size([336, 6]), torch.Size([96, 6])
+    Validation set sample shapes: torch.Size([336, 6]), torch.Size([96, 6])
+    Test set data shapes: torch.Size([3800, 6]), torch.Size([3800, 6])
+    Number of batches in train_loader: 101
+    Batch 0: Data shape torch.Size([128, 336, 6]), Target shape torch.Size([128, 96, 6])
+    
+    ==================================================
+    Data Preparation: lorenz96
+    ==================================================
+    Sequence Length: 336
+    Prediction Length: 96
+    Batch Size: 128
+    Scaling: No
+    Train Split: 0.7
+    Val Split: 0.8
+    Training Batches: 101
+    Validation Batches: 12
+    Test Batches: 27
+    ==================================================
+    
+    ==================================================
+     Running experiment with seed 1955 (1/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 13.3764, mae: 2.8797, huber: 2.4191, swd: 5.4791, ept: 36.4664
+    Epoch [1/50], Val Losses: mse: 11.6270, mae: 2.6272, huber: 2.1740, swd: 5.3407, ept: 49.0997
+    Epoch [1/50], Test Losses: mse: 12.2641, mae: 2.6890, huber: 2.2350, swd: 4.9232, ept: 48.8140
+      Epoch 1 composite train-obj: 2.419113
+            Val objective improved inf → 2.1740, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 11.6890, mae: 2.6251, huber: 2.1750, swd: 4.7298, ept: 50.8193
+    Epoch [2/50], Val Losses: mse: 10.8614, mae: 2.5055, huber: 2.0601, swd: 4.7671, ept: 52.9056
+    Epoch [2/50], Test Losses: mse: 11.7865, mae: 2.5833, huber: 2.1383, swd: 4.4006, ept: 52.8581
+      Epoch 2 composite train-obj: 2.175004
+            Val objective improved 2.1740 → 2.0601, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 11.2900, mae: 2.5494, huber: 2.1062, swd: 4.4345, ept: 53.0797
+    Epoch [3/50], Val Losses: mse: 10.7019, mae: 2.4775, huber: 2.0358, swd: 4.6874, ept: 53.5404
+    Epoch [3/50], Test Losses: mse: 11.5783, mae: 2.5446, huber: 2.1036, swd: 4.3184, ept: 54.2936
+      Epoch 3 composite train-obj: 2.106198
+            Val objective improved 2.0601 → 2.0358, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 11.0405, mae: 2.5065, huber: 2.0676, swd: 4.2811, ept: 54.2221
+    Epoch [4/50], Val Losses: mse: 10.3883, mae: 2.4214, huber: 1.9842, swd: 4.6469, ept: 54.0107
+    Epoch [4/50], Test Losses: mse: 11.1819, mae: 2.4942, huber: 2.0577, swd: 4.2079, ept: 55.1551
+      Epoch 4 composite train-obj: 2.067558
+            Val objective improved 2.0358 → 1.9842, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 10.8666, mae: 2.4745, huber: 2.0386, swd: 4.1453, ept: 55.0465
+    Epoch [5/50], Val Losses: mse: 10.2527, mae: 2.4023, huber: 1.9675, swd: 4.4958, ept: 55.0437
+    Epoch [5/50], Test Losses: mse: 11.0850, mae: 2.4701, huber: 2.0354, swd: 4.1415, ept: 55.5444
+      Epoch 5 composite train-obj: 2.038608
+            Val objective improved 1.9842 → 1.9675, saving checkpoint.
+    Epoch [6/50], Train Losses: mse: 10.6810, mae: 2.4476, huber: 2.0139, swd: 4.0500, ept: 55.6215
+    Epoch [6/50], Val Losses: mse: 10.1121, mae: 2.3772, huber: 1.9438, swd: 4.4912, ept: 56.3361
+    Epoch [6/50], Test Losses: mse: 10.9443, mae: 2.4460, huber: 2.0149, swd: 4.1019, ept: 55.7236
+      Epoch 6 composite train-obj: 2.013878
+            Val objective improved 1.9675 → 1.9438, saving checkpoint.
+    Epoch [7/50], Train Losses: mse: 10.5608, mae: 2.4279, huber: 1.9961, swd: 3.9667, ept: 55.9467
+    Epoch [7/50], Val Losses: mse: 10.1179, mae: 2.3750, huber: 1.9421, swd: 4.3224, ept: 55.4263
+    Epoch [7/50], Test Losses: mse: 10.8062, mae: 2.4313, huber: 1.9995, swd: 3.8688, ept: 56.1066
+      Epoch 7 composite train-obj: 1.996101
+            Val objective improved 1.9438 → 1.9421, saving checkpoint.
+    Epoch [8/50], Train Losses: mse: 10.4161, mae: 2.4090, huber: 1.9782, swd: 3.8825, ept: 56.3847
+    Epoch [8/50], Val Losses: mse: 9.7460, mae: 2.3332, huber: 1.9011, swd: 4.2310, ept: 57.7577
+    Epoch [8/50], Test Losses: mse: 10.6901, mae: 2.4217, huber: 1.9903, swd: 3.9074, ept: 56.8879
+      Epoch 8 composite train-obj: 1.978157
+            Val objective improved 1.9421 → 1.9011, saving checkpoint.
+    Epoch [9/50], Train Losses: mse: 10.3280, mae: 2.3939, huber: 1.9643, swd: 3.8105, ept: 56.7391
+    Epoch [9/50], Val Losses: mse: 9.8818, mae: 2.3364, huber: 1.9068, swd: 4.2792, ept: 57.0707
+    Epoch [9/50], Test Losses: mse: 10.7655, mae: 2.4196, huber: 1.9908, swd: 3.9877, ept: 56.1831
+      Epoch 9 composite train-obj: 1.964339
+            No improvement (1.9068), counter 1/5
+    Epoch [10/50], Train Losses: mse: 10.2312, mae: 2.3803, huber: 1.9519, swd: 3.7547, ept: 56.9871
+    Epoch [10/50], Val Losses: mse: 9.8660, mae: 2.3369, huber: 1.9078, swd: 4.0415, ept: 57.3324
+    Epoch [10/50], Test Losses: mse: 10.6946, mae: 2.4024, huber: 1.9745, swd: 3.7330, ept: 57.0314
+      Epoch 10 composite train-obj: 1.951910
+            No improvement (1.9078), counter 2/5
+    Epoch [11/50], Train Losses: mse: 10.1412, mae: 2.3667, huber: 1.9394, swd: 3.6866, ept: 57.2390
+    Epoch [11/50], Val Losses: mse: 9.7471, mae: 2.3251, huber: 1.8959, swd: 4.0798, ept: 57.6446
+    Epoch [11/50], Test Losses: mse: 10.6115, mae: 2.4027, huber: 1.9748, swd: 3.8349, ept: 57.2217
+      Epoch 11 composite train-obj: 1.939405
+            Val objective improved 1.9011 → 1.8959, saving checkpoint.
+    Epoch [12/50], Train Losses: mse: 10.0606, mae: 2.3568, huber: 1.9299, swd: 3.6456, ept: 57.3979
+    Epoch [12/50], Val Losses: mse: 9.6256, mae: 2.3037, huber: 1.8761, swd: 4.0807, ept: 58.2644
+    Epoch [12/50], Test Losses: mse: 10.4905, mae: 2.3860, huber: 1.9590, swd: 3.8327, ept: 57.1133
+      Epoch 12 composite train-obj: 1.929910
+            Val objective improved 1.8959 → 1.8761, saving checkpoint.
+    Epoch [13/50], Train Losses: mse: 10.0004, mae: 2.3484, huber: 1.9223, swd: 3.5966, ept: 57.5901
+    Epoch [13/50], Val Losses: mse: 9.6353, mae: 2.3211, huber: 1.8905, swd: 4.0019, ept: 57.8776
+    Epoch [13/50], Test Losses: mse: 10.4008, mae: 2.3806, huber: 1.9545, swd: 3.7099, ept: 56.9852
+      Epoch 13 composite train-obj: 1.922269
+            No improvement (1.8905), counter 1/5
+    Epoch [14/50], Train Losses: mse: 9.9224, mae: 2.3370, huber: 1.9114, swd: 3.5418, ept: 57.7602
+    Epoch [14/50], Val Losses: mse: 9.7649, mae: 2.3305, huber: 1.9037, swd: 4.0839, ept: 56.4223
+    Epoch [14/50], Test Losses: mse: 10.5800, mae: 2.4021, huber: 1.9763, swd: 3.7988, ept: 56.8917
+      Epoch 14 composite train-obj: 1.911395
+            No improvement (1.9037), counter 2/5
+    Epoch [15/50], Train Losses: mse: 9.8516, mae: 2.3274, huber: 1.9025, swd: 3.4945, ept: 57.8486
+    Epoch [15/50], Val Losses: mse: 9.4486, mae: 2.2912, huber: 1.8639, swd: 3.8365, ept: 58.9997
+    Epoch [15/50], Test Losses: mse: 10.4193, mae: 2.3777, huber: 1.9516, swd: 3.6378, ept: 57.8319
+      Epoch 15 composite train-obj: 1.902525
+            Val objective improved 1.8761 → 1.8639, saving checkpoint.
+    Epoch [16/50], Train Losses: mse: 9.7804, mae: 2.3190, huber: 1.8947, swd: 3.4455, ept: 58.0900
+    Epoch [16/50], Val Losses: mse: 9.6000, mae: 2.3062, huber: 1.8789, swd: 3.8070, ept: 58.2212
+    Epoch [16/50], Test Losses: mse: 10.2935, mae: 2.3502, huber: 1.9267, swd: 3.4729, ept: 57.5389
+      Epoch 16 composite train-obj: 1.894670
+            No improvement (1.8789), counter 1/5
+    Epoch [17/50], Train Losses: mse: 9.7385, mae: 2.3130, huber: 1.8889, swd: 3.4345, ept: 58.0837
+    Epoch [17/50], Val Losses: mse: 9.4682, mae: 2.2858, huber: 1.8600, swd: 3.7939, ept: 58.6237
+    Epoch [17/50], Test Losses: mse: 10.3178, mae: 2.3600, huber: 1.9351, swd: 3.5408, ept: 57.4895
+      Epoch 17 composite train-obj: 1.888927
+            Val objective improved 1.8639 → 1.8600, saving checkpoint.
+    Epoch [18/50], Train Losses: mse: 9.6716, mae: 2.3040, huber: 1.8806, swd: 3.3731, ept: 58.2645
+    Epoch [18/50], Val Losses: mse: 9.4342, mae: 2.2899, huber: 1.8634, swd: 3.8370, ept: 59.0261
+    Epoch [18/50], Test Losses: mse: 10.2472, mae: 2.3661, huber: 1.9399, swd: 3.6213, ept: 57.5260
+      Epoch 18 composite train-obj: 1.880614
+            No improvement (1.8634), counter 1/5
+    Epoch [19/50], Train Losses: mse: 9.6389, mae: 2.2990, huber: 1.8760, swd: 3.3372, ept: 58.3638
+    Epoch [19/50], Val Losses: mse: 9.4701, mae: 2.2932, huber: 1.8675, swd: 3.7927, ept: 58.5924
+    Epoch [19/50], Test Losses: mse: 10.1531, mae: 2.3382, huber: 1.9156, swd: 3.5079, ept: 58.0129
+      Epoch 19 composite train-obj: 1.875993
+            No improvement (1.8675), counter 2/5
+    Epoch [20/50], Train Losses: mse: 9.5963, mae: 2.2932, huber: 1.8706, swd: 3.3044, ept: 58.4298
+    Epoch [20/50], Val Losses: mse: 9.4286, mae: 2.2856, huber: 1.8600, swd: 3.8400, ept: 58.3505
+    Epoch [20/50], Test Losses: mse: 10.1777, mae: 2.3513, huber: 1.9276, swd: 3.5745, ept: 57.4992
+      Epoch 20 composite train-obj: 1.870596
+            Val objective improved 1.8600 → 1.8600, saving checkpoint.
+    Epoch [21/50], Train Losses: mse: 9.5457, mae: 2.2869, huber: 1.8646, swd: 3.2863, ept: 58.5721
+    Epoch [21/50], Val Losses: mse: 9.4186, mae: 2.2819, huber: 1.8573, swd: 3.6145, ept: 59.3607
+    Epoch [21/50], Test Losses: mse: 10.3105, mae: 2.3576, huber: 1.9341, swd: 3.4221, ept: 57.9336
+      Epoch 21 composite train-obj: 1.864645
+            Val objective improved 1.8600 → 1.8573, saving checkpoint.
+    Epoch [22/50], Train Losses: mse: 9.5067, mae: 2.2809, huber: 1.8592, swd: 3.2451, ept: 58.6451
+    Epoch [22/50], Val Losses: mse: 9.3330, mae: 2.2827, huber: 1.8567, swd: 3.6108, ept: 59.4616
+    Epoch [22/50], Test Losses: mse: 10.0753, mae: 2.3381, huber: 1.9139, swd: 3.3743, ept: 58.2677
+      Epoch 22 composite train-obj: 1.859202
+            Val objective improved 1.8573 → 1.8567, saving checkpoint.
+    Epoch [23/50], Train Losses: mse: 9.4660, mae: 2.2763, huber: 1.8547, swd: 3.2130, ept: 58.8225
+    Epoch [23/50], Val Losses: mse: 9.5445, mae: 2.2994, huber: 1.8736, swd: 3.7925, ept: 59.1905
+    Epoch [23/50], Test Losses: mse: 10.2013, mae: 2.3484, huber: 1.9248, swd: 3.5560, ept: 57.7705
+      Epoch 23 composite train-obj: 1.854715
+            No improvement (1.8736), counter 1/5
+    Epoch [24/50], Train Losses: mse: 9.4472, mae: 2.2729, huber: 1.8517, swd: 3.1836, ept: 58.7548
+    Epoch [24/50], Val Losses: mse: 9.3721, mae: 2.2807, huber: 1.8559, swd: 3.6861, ept: 59.1368
+    Epoch [24/50], Test Losses: mse: 10.0339, mae: 2.3275, huber: 1.9045, swd: 3.4094, ept: 58.1137
+      Epoch 24 composite train-obj: 1.851707
+            Val objective improved 1.8567 → 1.8559, saving checkpoint.
+    Epoch [25/50], Train Losses: mse: 9.4183, mae: 2.2686, huber: 1.8478, swd: 3.1665, ept: 58.9946
+    Epoch [25/50], Val Losses: mse: 9.3996, mae: 2.2753, huber: 1.8518, swd: 3.5748, ept: 59.4423
+    Epoch [25/50], Test Losses: mse: 10.1957, mae: 2.3444, huber: 1.9232, swd: 3.4108, ept: 57.5935
+      Epoch 25 composite train-obj: 1.847838
+            Val objective improved 1.8559 → 1.8518, saving checkpoint.
+    Epoch [26/50], Train Losses: mse: 9.3752, mae: 2.2633, huber: 1.8424, swd: 3.1312, ept: 58.8806
+    Epoch [26/50], Val Losses: mse: 9.5360, mae: 2.3058, huber: 1.8809, swd: 3.6415, ept: 58.4427
+    Epoch [26/50], Test Losses: mse: 10.0339, mae: 2.3244, huber: 1.9032, swd: 3.3884, ept: 58.2888
+      Epoch 26 composite train-obj: 1.842427
+            No improvement (1.8809), counter 1/5
+    Epoch [27/50], Train Losses: mse: 9.3562, mae: 2.2606, huber: 1.8402, swd: 3.1178, ept: 59.0358
+    Epoch [27/50], Val Losses: mse: 9.3901, mae: 2.2843, huber: 1.8589, swd: 3.4766, ept: 59.2772
+    Epoch [27/50], Test Losses: mse: 10.0776, mae: 2.3372, huber: 1.9143, swd: 3.2808, ept: 58.0076
+      Epoch 27 composite train-obj: 1.840220
+            No improvement (1.8589), counter 2/5
+    Epoch [28/50], Train Losses: mse: 9.3177, mae: 2.2548, huber: 1.8349, swd: 3.0810, ept: 59.0702
+    Epoch [28/50], Val Losses: mse: 9.3850, mae: 2.2819, huber: 1.8571, swd: 3.5556, ept: 59.4087
+    Epoch [28/50], Test Losses: mse: 10.0149, mae: 2.3261, huber: 1.9039, swd: 3.3859, ept: 58.0166
+      Epoch 28 composite train-obj: 1.834906
+            No improvement (1.8571), counter 3/5
+    Epoch [29/50], Train Losses: mse: 9.3020, mae: 2.2523, huber: 1.8325, swd: 3.0677, ept: 59.1290
+    Epoch [29/50], Val Losses: mse: 9.2991, mae: 2.2743, huber: 1.8511, swd: 3.5698, ept: 59.5442
+    Epoch [29/50], Test Losses: mse: 10.0177, mae: 2.3361, huber: 1.9137, swd: 3.3985, ept: 58.0250
+      Epoch 29 composite train-obj: 1.832517
+            Val objective improved 1.8518 → 1.8511, saving checkpoint.
+    Epoch [30/50], Train Losses: mse: 9.2577, mae: 2.2474, huber: 1.8277, swd: 3.0494, ept: 59.1459
+    Epoch [30/50], Val Losses: mse: 9.2644, mae: 2.2712, huber: 1.8463, swd: 3.4804, ept: 59.5549
+    Epoch [30/50], Test Losses: mse: 9.9144, mae: 2.3133, huber: 1.8918, swd: 3.2821, ept: 58.5693
+      Epoch 30 composite train-obj: 1.827686
+            Val objective improved 1.8511 → 1.8463, saving checkpoint.
+    Epoch [31/50], Train Losses: mse: 9.2534, mae: 2.2460, huber: 1.8265, swd: 3.0354, ept: 59.2460
+    Epoch [31/50], Val Losses: mse: 9.2610, mae: 2.2665, huber: 1.8430, swd: 3.2731, ept: 60.0475
+    Epoch [31/50], Test Losses: mse: 10.0592, mae: 2.3210, huber: 1.8995, swd: 3.0758, ept: 58.6281
+      Epoch 31 composite train-obj: 1.826528
+            Val objective improved 1.8463 → 1.8430, saving checkpoint.
+    Epoch [32/50], Train Losses: mse: 9.2481, mae: 2.2440, huber: 1.8248, swd: 2.9882, ept: 59.2450
+    Epoch [32/50], Val Losses: mse: 9.1903, mae: 2.2649, huber: 1.8406, swd: 3.4650, ept: 59.3491
+    Epoch [32/50], Test Losses: mse: 10.0073, mae: 2.3316, huber: 1.9086, swd: 3.2288, ept: 58.1058
+      Epoch 32 composite train-obj: 1.824821
+            Val objective improved 1.8430 → 1.8406, saving checkpoint.
+    Epoch [33/50], Train Losses: mse: 9.2245, mae: 2.2426, huber: 1.8235, swd: 3.0004, ept: 59.2321
+    Epoch [33/50], Val Losses: mse: 9.4117, mae: 2.2760, huber: 1.8537, swd: 3.4170, ept: 59.4083
+    Epoch [33/50], Test Losses: mse: 10.0097, mae: 2.3280, huber: 1.9059, swd: 3.2964, ept: 58.0819
+      Epoch 33 composite train-obj: 1.823548
+            No improvement (1.8537), counter 1/5
+    Epoch [34/50], Train Losses: mse: 9.2035, mae: 2.2379, huber: 1.8192, swd: 2.9784, ept: 59.3705
+    Epoch [34/50], Val Losses: mse: 9.4533, mae: 2.2810, huber: 1.8581, swd: 3.4069, ept: 60.0618
+    Epoch [34/50], Test Losses: mse: 10.0695, mae: 2.3254, huber: 1.9040, swd: 3.2429, ept: 58.1597
+      Epoch 34 composite train-obj: 1.819232
+            No improvement (1.8581), counter 2/5
+    Epoch [35/50], Train Losses: mse: 9.1932, mae: 2.2362, huber: 1.8175, swd: 2.9634, ept: 59.3937
+    Epoch [35/50], Val Losses: mse: 9.3019, mae: 2.2724, huber: 1.8495, swd: 3.4445, ept: 59.4634
+    Epoch [35/50], Test Losses: mse: 10.0111, mae: 2.3271, huber: 1.9061, swd: 3.3299, ept: 57.9605
+      Epoch 35 composite train-obj: 1.817495
+            No improvement (1.8495), counter 3/5
+    Epoch [36/50], Train Losses: mse: 9.1675, mae: 2.2329, huber: 1.8145, swd: 2.9311, ept: 59.4485
+    Epoch [36/50], Val Losses: mse: 9.3753, mae: 2.2795, huber: 1.8567, swd: 3.3944, ept: 59.6003
+    Epoch [36/50], Test Losses: mse: 9.9734, mae: 2.3209, huber: 1.8999, swd: 3.1731, ept: 58.2547
+      Epoch 36 composite train-obj: 1.814496
+            No improvement (1.8567), counter 4/5
+    Epoch [37/50], Train Losses: mse: 9.1673, mae: 2.2327, huber: 1.8146, swd: 2.9260, ept: 59.3770
+    Epoch [37/50], Val Losses: mse: 9.6132, mae: 2.3002, huber: 1.8784, swd: 3.4953, ept: 59.2403
+    Epoch [37/50], Test Losses: mse: 10.1368, mae: 2.3384, huber: 1.9181, swd: 3.3181, ept: 57.7918
+      Epoch 37 composite train-obj: 1.814565
+    Epoch [37/50], Test Losses: mse: 10.0073, mae: 2.3316, huber: 1.9086, swd: 3.2288, ept: 58.1058
+    Best round's Test MSE: 10.0073, MAE: 2.3316, SWD: 3.2288
+    Best round's Validation MSE: 9.1903, MAE: 2.2649, SWD: 3.4650
+    Best round's Test verification MSE : 10.0073, MAE: 2.3316, SWD: 3.2288
+    Time taken: 39.54 seconds
+    
+    ==================================================
+     Running experiment with seed 7 (2/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 13.3580, mae: 2.8778, huber: 2.4172, swd: 5.4512, ept: 36.4584
+    Epoch [1/50], Val Losses: mse: 11.6337, mae: 2.6275, huber: 2.1744, swd: 5.4478, ept: 48.1551
+    Epoch [1/50], Test Losses: mse: 12.2383, mae: 2.6883, huber: 2.2345, swd: 4.9758, ept: 48.3762
+      Epoch 1 composite train-obj: 2.417166
+            Val objective improved inf → 2.1744, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 11.6917, mae: 2.6271, huber: 2.1769, swd: 4.7306, ept: 50.7166
+    Epoch [2/50], Val Losses: mse: 11.0498, mae: 2.5295, huber: 2.0822, swd: 5.0033, ept: 52.6551
+    Epoch [2/50], Test Losses: mse: 11.6789, mae: 2.5816, huber: 2.1375, swd: 4.5729, ept: 52.3623
+      Epoch 2 composite train-obj: 2.176868
+            Val objective improved 2.1744 → 2.0822, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 11.2679, mae: 2.5476, huber: 2.1046, swd: 4.4521, ept: 53.0881
+    Epoch [3/50], Val Losses: mse: 10.8244, mae: 2.4819, huber: 2.0394, swd: 4.9382, ept: 53.7220
+    Epoch [3/50], Test Losses: mse: 11.4653, mae: 2.5441, huber: 2.1038, swd: 4.4662, ept: 53.9000
+      Epoch 3 composite train-obj: 2.104558
+            Val objective improved 2.0822 → 2.0394, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 11.0372, mae: 2.5052, huber: 2.0662, swd: 4.2663, ept: 54.2979
+    Epoch [4/50], Val Losses: mse: 10.3957, mae: 2.4237, huber: 1.9858, swd: 4.6201, ept: 55.0958
+    Epoch [4/50], Test Losses: mse: 11.1478, mae: 2.4972, huber: 2.0608, swd: 4.2660, ept: 54.7360
+      Epoch 4 composite train-obj: 2.066231
+            Val objective improved 2.0394 → 1.9858, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 10.8548, mae: 2.4734, huber: 2.0376, swd: 4.1309, ept: 54.9793
+    Epoch [5/50], Val Losses: mse: 10.2484, mae: 2.4045, huber: 1.9683, swd: 4.5474, ept: 55.9886
+    Epoch [5/50], Test Losses: mse: 11.1160, mae: 2.4777, huber: 2.0439, swd: 4.2092, ept: 55.7140
+      Epoch 5 composite train-obj: 2.037631
+            Val objective improved 1.9858 → 1.9683, saving checkpoint.
+    Epoch [6/50], Train Losses: mse: 10.6774, mae: 2.4466, huber: 2.0130, swd: 4.0481, ept: 55.6624
+    Epoch [6/50], Val Losses: mse: 10.0891, mae: 2.3765, huber: 1.9429, swd: 4.2915, ept: 56.1400
+    Epoch [6/50], Test Losses: mse: 10.9769, mae: 2.4559, huber: 2.0234, swd: 3.9553, ept: 55.7310
+      Epoch 6 composite train-obj: 2.012958
+            Val objective improved 1.9683 → 1.9429, saving checkpoint.
+    Epoch [7/50], Train Losses: mse: 10.5620, mae: 2.4281, huber: 1.9961, swd: 3.9466, ept: 55.9590
+    Epoch [7/50], Val Losses: mse: 9.9444, mae: 2.3575, huber: 1.9255, swd: 4.2587, ept: 56.5864
+    Epoch [7/50], Test Losses: mse: 10.8250, mae: 2.4399, huber: 2.0087, swd: 3.8899, ept: 55.7754
+      Epoch 7 composite train-obj: 1.996128
+            Val objective improved 1.9429 → 1.9255, saving checkpoint.
+    Epoch [8/50], Train Losses: mse: 10.4361, mae: 2.4099, huber: 1.9792, swd: 3.8754, ept: 56.4675
+    Epoch [8/50], Val Losses: mse: 9.8630, mae: 2.3534, huber: 1.9211, swd: 4.2504, ept: 56.6309
+    Epoch [8/50], Test Losses: mse: 10.6356, mae: 2.4032, huber: 1.9735, swd: 3.8530, ept: 56.6542
+      Epoch 8 composite train-obj: 1.979169
+            Val objective improved 1.9255 → 1.9211, saving checkpoint.
+    Epoch [9/50], Train Losses: mse: 10.3268, mae: 2.3944, huber: 1.9650, swd: 3.8227, ept: 56.6851
+    Epoch [9/50], Val Losses: mse: 9.8175, mae: 2.3356, huber: 1.9051, swd: 4.1201, ept: 57.4705
+    Epoch [9/50], Test Losses: mse: 10.8909, mae: 2.4369, huber: 2.0081, swd: 3.8459, ept: 56.1411
+      Epoch 9 composite train-obj: 1.964953
+            Val objective improved 1.9211 → 1.9051, saving checkpoint.
+    Epoch [10/50], Train Losses: mse: 10.2363, mae: 2.3812, huber: 1.9526, swd: 3.7473, ept: 56.9378
+    Epoch [10/50], Val Losses: mse: 9.9181, mae: 2.3378, huber: 1.9084, swd: 4.2175, ept: 57.3990
+    Epoch [10/50], Test Losses: mse: 10.7352, mae: 2.4088, huber: 1.9817, swd: 3.8938, ept: 56.8006
+      Epoch 10 composite train-obj: 1.952628
+            No improvement (1.9084), counter 1/5
+    Epoch [11/50], Train Losses: mse: 10.1578, mae: 2.3695, huber: 1.9419, swd: 3.6920, ept: 57.1529
+    Epoch [11/50], Val Losses: mse: 9.7851, mae: 2.3311, huber: 1.9018, swd: 4.2232, ept: 57.3284
+    Epoch [11/50], Test Losses: mse: 10.5934, mae: 2.4090, huber: 1.9803, swd: 3.9107, ept: 56.8617
+      Epoch 11 composite train-obj: 1.941948
+            Val objective improved 1.9051 → 1.9018, saving checkpoint.
+    Epoch [12/50], Train Losses: mse: 10.0427, mae: 2.3553, huber: 1.9285, swd: 3.6541, ept: 57.4971
+    Epoch [12/50], Val Losses: mse: 9.6566, mae: 2.3149, huber: 1.8857, swd: 3.9173, ept: 57.9994
+    Epoch [12/50], Test Losses: mse: 10.5095, mae: 2.3904, huber: 1.9619, swd: 3.6242, ept: 57.5496
+      Epoch 12 composite train-obj: 1.928500
+            Val objective improved 1.9018 → 1.8857, saving checkpoint.
+    Epoch [13/50], Train Losses: mse: 9.9721, mae: 2.3447, huber: 1.9187, swd: 3.5867, ept: 57.5759
+    Epoch [13/50], Val Losses: mse: 9.5807, mae: 2.3050, huber: 1.8767, swd: 3.8735, ept: 57.8674
+    Epoch [13/50], Test Losses: mse: 10.5344, mae: 2.3999, huber: 1.9723, swd: 3.6709, ept: 57.0973
+      Epoch 13 composite train-obj: 1.918679
+            Val objective improved 1.8857 → 1.8767, saving checkpoint.
+    Epoch [14/50], Train Losses: mse: 9.9176, mae: 2.3367, huber: 1.9112, swd: 3.5460, ept: 57.7085
+    Epoch [14/50], Val Losses: mse: 9.6548, mae: 2.3164, huber: 1.8879, swd: 3.9610, ept: 58.0784
+    Epoch [14/50], Test Losses: mse: 10.5059, mae: 2.3955, huber: 1.9687, swd: 3.6744, ept: 57.2760
+      Epoch 14 composite train-obj: 1.911180
+            No improvement (1.8879), counter 1/5
+    Epoch [15/50], Train Losses: mse: 9.8543, mae: 2.3287, huber: 1.9037, swd: 3.5072, ept: 57.8704
+    Epoch [15/50], Val Losses: mse: 9.4129, mae: 2.2844, huber: 1.8565, swd: 3.7200, ept: 58.6216
+    Epoch [15/50], Test Losses: mse: 10.3329, mae: 2.3636, huber: 1.9384, swd: 3.5143, ept: 57.5745
+      Epoch 15 composite train-obj: 1.903732
+            Val objective improved 1.8767 → 1.8565, saving checkpoint.
+    Epoch [16/50], Train Losses: mse: 9.7957, mae: 2.3198, huber: 1.8955, swd: 3.4568, ept: 58.0220
+    Epoch [16/50], Val Losses: mse: 9.5165, mae: 2.2982, huber: 1.8702, swd: 3.8561, ept: 58.4815
+    Epoch [16/50], Test Losses: mse: 10.2819, mae: 2.3523, huber: 1.9268, swd: 3.5918, ept: 57.8454
+      Epoch 16 composite train-obj: 1.895519
+            No improvement (1.8702), counter 1/5
+    Epoch [17/50], Train Losses: mse: 9.7377, mae: 2.3126, huber: 1.8887, swd: 3.4389, ept: 58.1598
+    Epoch [17/50], Val Losses: mse: 9.5829, mae: 2.2982, huber: 1.8726, swd: 3.6618, ept: 58.4850
+    Epoch [17/50], Test Losses: mse: 10.3277, mae: 2.3623, huber: 1.9378, swd: 3.4729, ept: 57.7744
+      Epoch 17 composite train-obj: 1.888651
+            No improvement (1.8726), counter 2/5
+    Epoch [18/50], Train Losses: mse: 9.6799, mae: 2.3042, huber: 1.8808, swd: 3.3891, ept: 58.3632
+    Epoch [18/50], Val Losses: mse: 9.3039, mae: 2.2688, huber: 1.8430, swd: 3.6873, ept: 59.2137
+    Epoch [18/50], Test Losses: mse: 10.2048, mae: 2.3482, huber: 1.9234, swd: 3.4487, ept: 57.9398
+      Epoch 18 composite train-obj: 1.880841
+            Val objective improved 1.8565 → 1.8430, saving checkpoint.
+    Epoch [19/50], Train Losses: mse: 9.6485, mae: 2.3006, huber: 1.8775, swd: 3.3557, ept: 58.3466
+    Epoch [19/50], Val Losses: mse: 9.7218, mae: 2.3177, huber: 1.8917, swd: 3.8522, ept: 58.3259
+    Epoch [19/50], Test Losses: mse: 10.3241, mae: 2.3542, huber: 1.9315, swd: 3.5833, ept: 57.2843
+      Epoch 19 composite train-obj: 1.877483
+            No improvement (1.8917), counter 1/5
+    Epoch [20/50], Train Losses: mse: 9.5868, mae: 2.2916, huber: 1.8689, swd: 3.3201, ept: 58.5026
+    Epoch [20/50], Val Losses: mse: 9.4915, mae: 2.2792, huber: 1.8552, swd: 3.7151, ept: 59.2555
+    Epoch [20/50], Test Losses: mse: 10.4083, mae: 2.3678, huber: 1.9439, swd: 3.5901, ept: 57.2042
+      Epoch 20 composite train-obj: 1.868873
+            No improvement (1.8552), counter 2/5
+    Epoch [21/50], Train Losses: mse: 9.5502, mae: 2.2873, huber: 1.8651, swd: 3.2920, ept: 58.5717
+    Epoch [21/50], Val Losses: mse: 9.5120, mae: 2.2962, huber: 1.8703, swd: 3.7677, ept: 59.1466
+    Epoch [21/50], Test Losses: mse: 10.2512, mae: 2.3583, huber: 1.9343, swd: 3.5443, ept: 57.9074
+      Epoch 21 composite train-obj: 1.865080
+            No improvement (1.8703), counter 3/5
+    Epoch [22/50], Train Losses: mse: 9.5090, mae: 2.2819, huber: 1.8599, swd: 3.2580, ept: 58.5846
+    Epoch [22/50], Val Losses: mse: 9.4558, mae: 2.2837, huber: 1.8604, swd: 3.6124, ept: 58.9045
+    Epoch [22/50], Test Losses: mse: 10.0792, mae: 2.3352, huber: 1.9118, swd: 3.3924, ept: 58.2901
+      Epoch 22 composite train-obj: 1.859903
+            No improvement (1.8604), counter 4/5
+    Epoch [23/50], Train Losses: mse: 9.4656, mae: 2.2759, huber: 1.8544, swd: 3.2336, ept: 58.7741
+    Epoch [23/50], Val Losses: mse: 9.2830, mae: 2.2667, huber: 1.8407, swd: 3.5717, ept: 60.1019
+    Epoch [23/50], Test Losses: mse: 10.0882, mae: 2.3344, huber: 1.9109, swd: 3.4747, ept: 58.0340
+      Epoch 23 composite train-obj: 1.854431
+            Val objective improved 1.8430 → 1.8407, saving checkpoint.
+    Epoch [24/50], Train Losses: mse: 9.4426, mae: 2.2720, huber: 1.8509, swd: 3.2083, ept: 58.8099
+    Epoch [24/50], Val Losses: mse: 9.5571, mae: 2.2975, huber: 1.8738, swd: 3.6704, ept: 59.1334
+    Epoch [24/50], Test Losses: mse: 10.3347, mae: 2.3600, huber: 1.9384, swd: 3.4376, ept: 57.4502
+      Epoch 24 composite train-obj: 1.850913
+            No improvement (1.8738), counter 1/5
+    Epoch [25/50], Train Losses: mse: 9.3988, mae: 2.2669, huber: 1.8460, swd: 3.1902, ept: 58.8967
+    Epoch [25/50], Val Losses: mse: 9.1220, mae: 2.2533, huber: 1.8288, swd: 3.4201, ept: 59.3558
+    Epoch [25/50], Test Losses: mse: 10.0933, mae: 2.3375, huber: 1.9150, swd: 3.3367, ept: 58.0926
+      Epoch 25 composite train-obj: 1.846008
+            Val objective improved 1.8407 → 1.8288, saving checkpoint.
+    Epoch [26/50], Train Losses: mse: 9.3816, mae: 2.2642, huber: 1.8436, swd: 3.1549, ept: 58.8900
+    Epoch [26/50], Val Losses: mse: 9.3788, mae: 2.2738, huber: 1.8495, swd: 3.6562, ept: 59.5153
+    Epoch [26/50], Test Losses: mse: 10.0312, mae: 2.3286, huber: 1.9066, swd: 3.4757, ept: 57.9081
+      Epoch 26 composite train-obj: 1.843650
+            No improvement (1.8495), counter 1/5
+    Epoch [27/50], Train Losses: mse: 9.3332, mae: 2.2576, huber: 1.8373, swd: 3.1402, ept: 58.9902
+    Epoch [27/50], Val Losses: mse: 9.1414, mae: 2.2502, huber: 1.8274, swd: 3.3557, ept: 60.3031
+    Epoch [27/50], Test Losses: mse: 10.0467, mae: 2.3276, huber: 1.9045, swd: 3.2326, ept: 58.2504
+      Epoch 27 composite train-obj: 1.837295
+            Val objective improved 1.8288 → 1.8274, saving checkpoint.
+    Epoch [28/50], Train Losses: mse: 9.3138, mae: 2.2551, huber: 1.8349, swd: 3.0957, ept: 59.0646
+    Epoch [28/50], Val Losses: mse: 9.4623, mae: 2.2826, huber: 1.8600, swd: 3.6412, ept: 59.6346
+    Epoch [28/50], Test Losses: mse: 10.1103, mae: 2.3360, huber: 1.9139, swd: 3.4410, ept: 57.8058
+      Epoch 28 composite train-obj: 1.834930
+            No improvement (1.8600), counter 1/5
+    Epoch [29/50], Train Losses: mse: 9.2968, mae: 2.2518, huber: 1.8320, swd: 3.0868, ept: 59.1458
+    Epoch [29/50], Val Losses: mse: 9.5967, mae: 2.3073, huber: 1.8832, swd: 3.6489, ept: 59.4173
+    Epoch [29/50], Test Losses: mse: 10.1008, mae: 2.3413, huber: 1.9182, swd: 3.4581, ept: 57.7993
+      Epoch 29 composite train-obj: 1.831960
+            No improvement (1.8832), counter 2/5
+    Epoch [30/50], Train Losses: mse: 9.2696, mae: 2.2484, huber: 1.8288, swd: 3.0671, ept: 59.1654
+    Epoch [30/50], Val Losses: mse: 9.6528, mae: 2.3081, huber: 1.8844, swd: 3.6694, ept: 58.6233
+    Epoch [30/50], Test Losses: mse: 10.1326, mae: 2.3363, huber: 1.9143, swd: 3.4063, ept: 57.9407
+      Epoch 30 composite train-obj: 1.828756
+            No improvement (1.8844), counter 3/5
+    Epoch [31/50], Train Losses: mse: 9.2619, mae: 2.2473, huber: 1.8280, swd: 3.0491, ept: 59.1226
+    Epoch [31/50], Val Losses: mse: 9.2342, mae: 2.2695, huber: 1.8460, swd: 3.4121, ept: 59.8564
+    Epoch [31/50], Test Losses: mse: 10.0266, mae: 2.3276, huber: 1.9054, swd: 3.2173, ept: 57.9100
+      Epoch 31 composite train-obj: 1.827995
+            No improvement (1.8460), counter 4/5
+    Epoch [32/50], Train Losses: mse: 9.2358, mae: 2.2428, huber: 1.8238, swd: 3.0333, ept: 59.2622
+    Epoch [32/50], Val Losses: mse: 9.3450, mae: 2.2756, huber: 1.8520, swd: 3.5090, ept: 60.0220
+    Epoch [32/50], Test Losses: mse: 10.0986, mae: 2.3370, huber: 1.9152, swd: 3.4075, ept: 57.9508
+      Epoch 32 composite train-obj: 1.823793
+    Epoch [32/50], Test Losses: mse: 10.0467, mae: 2.3276, huber: 1.9045, swd: 3.2326, ept: 58.2504
+    Best round's Test MSE: 10.0467, MAE: 2.3276, SWD: 3.2326
+    Best round's Validation MSE: 9.1414, MAE: 2.2502, SWD: 3.3557
+    Best round's Test verification MSE : 10.0467, MAE: 2.3276, SWD: 3.2326
+    Time taken: 33.99 seconds
+    
+    ==================================================
+     Running experiment with seed 20 (3/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 13.3331, mae: 2.8755, huber: 2.4150, swd: 4.9889, ept: 36.2584
+    Epoch [1/50], Val Losses: mse: 11.5241, mae: 2.6198, huber: 2.1656, swd: 4.8214, ept: 48.9669
+    Epoch [1/50], Test Losses: mse: 12.1613, mae: 2.6766, huber: 2.2231, swd: 4.4551, ept: 49.2323
+      Epoch 1 composite train-obj: 2.415034
+            Val objective improved inf → 2.1656, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 11.7016, mae: 2.6263, huber: 2.1763, swd: 4.2830, ept: 50.9085
+    Epoch [2/50], Val Losses: mse: 11.0790, mae: 2.5315, huber: 2.0861, swd: 4.5024, ept: 51.3998
+    Epoch [2/50], Test Losses: mse: 11.5741, mae: 2.5760, huber: 2.1309, swd: 4.0165, ept: 52.1429
+      Epoch 2 composite train-obj: 2.176333
+            Val objective improved 2.1656 → 2.0861, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 11.2985, mae: 2.5517, huber: 2.1084, swd: 4.0253, ept: 53.0584
+    Epoch [3/50], Val Losses: mse: 10.7411, mae: 2.4770, huber: 2.0352, swd: 4.4662, ept: 53.4553
+    Epoch [3/50], Test Losses: mse: 11.4283, mae: 2.5399, huber: 2.0987, swd: 4.0397, ept: 54.0739
+      Epoch 3 composite train-obj: 2.108438
+            Val objective improved 2.0861 → 2.0352, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 11.0350, mae: 2.5053, huber: 2.0664, swd: 3.8460, ept: 54.2304
+    Epoch [4/50], Val Losses: mse: 10.5256, mae: 2.4438, huber: 2.0055, swd: 4.2617, ept: 54.3565
+    Epoch [4/50], Test Losses: mse: 11.2177, mae: 2.4993, huber: 2.0625, swd: 3.8115, ept: 54.9678
+      Epoch 4 composite train-obj: 2.066432
+            Val objective improved 2.0352 → 2.0055, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 10.8559, mae: 2.4758, huber: 2.0397, swd: 3.7420, ept: 54.9441
+    Epoch [5/50], Val Losses: mse: 10.3152, mae: 2.4074, huber: 1.9720, swd: 3.9508, ept: 55.2365
+    Epoch [5/50], Test Losses: mse: 11.1228, mae: 2.4747, huber: 2.0403, swd: 3.6853, ept: 55.9548
+      Epoch 5 composite train-obj: 2.039653
+            Val objective improved 2.0055 → 1.9720, saving checkpoint.
+    Epoch [6/50], Train Losses: mse: 10.6849, mae: 2.4481, huber: 2.0143, swd: 3.6376, ept: 55.6008
+    Epoch [6/50], Val Losses: mse: 10.1560, mae: 2.3905, huber: 1.9564, swd: 4.0721, ept: 55.9959
+    Epoch [6/50], Test Losses: mse: 10.9628, mae: 2.4587, huber: 2.0263, swd: 3.7323, ept: 56.0421
+      Epoch 6 composite train-obj: 2.014256
+            Val objective improved 1.9720 → 1.9564, saving checkpoint.
+    Epoch [7/50], Train Losses: mse: 10.5501, mae: 2.4275, huber: 1.9954, swd: 3.5581, ept: 56.0657
+    Epoch [7/50], Val Losses: mse: 9.9872, mae: 2.3635, huber: 1.9297, swd: 3.7720, ept: 56.1138
+    Epoch [7/50], Test Losses: mse: 10.7413, mae: 2.4192, huber: 1.9889, swd: 3.3932, ept: 56.5325
+      Epoch 7 composite train-obj: 1.995352
+            Val objective improved 1.9564 → 1.9297, saving checkpoint.
+    Epoch [8/50], Train Losses: mse: 10.4356, mae: 2.4089, huber: 1.9783, swd: 3.4833, ept: 56.3250
+    Epoch [8/50], Val Losses: mse: 9.9855, mae: 2.3684, huber: 1.9365, swd: 3.8899, ept: 56.2103
+    Epoch [8/50], Test Losses: mse: 10.8609, mae: 2.4325, huber: 2.0022, swd: 3.5293, ept: 56.3926
+      Epoch 8 composite train-obj: 1.978348
+            No improvement (1.9365), counter 1/5
+    Epoch [9/50], Train Losses: mse: 10.3353, mae: 2.3956, huber: 1.9661, swd: 3.4207, ept: 56.6813
+    Epoch [9/50], Val Losses: mse: 9.9639, mae: 2.3593, huber: 1.9285, swd: 3.7414, ept: 56.9386
+    Epoch [9/50], Test Losses: mse: 10.6707, mae: 2.4103, huber: 1.9812, swd: 3.4322, ept: 57.0036
+      Epoch 9 composite train-obj: 1.966083
+            Val objective improved 1.9297 → 1.9285, saving checkpoint.
+    Epoch [10/50], Train Losses: mse: 10.2447, mae: 2.3815, huber: 1.9531, swd: 3.3666, ept: 56.9757
+    Epoch [10/50], Val Losses: mse: 9.7853, mae: 2.3353, huber: 1.9059, swd: 3.7766, ept: 57.4949
+    Epoch [10/50], Test Losses: mse: 10.6174, mae: 2.4053, huber: 1.9772, swd: 3.4404, ept: 56.6981
+      Epoch 10 composite train-obj: 1.953067
+            Val objective improved 1.9285 → 1.9059, saving checkpoint.
+    Epoch [11/50], Train Losses: mse: 10.1489, mae: 2.3690, huber: 1.9414, swd: 3.3169, ept: 57.2125
+    Epoch [11/50], Val Losses: mse: 9.7828, mae: 2.3324, huber: 1.9022, swd: 3.6295, ept: 57.4384
+    Epoch [11/50], Test Losses: mse: 10.4811, mae: 2.3807, huber: 1.9538, swd: 3.2982, ept: 57.5688
+      Epoch 11 composite train-obj: 1.941445
+            Val objective improved 1.9059 → 1.9022, saving checkpoint.
+    Epoch [12/50], Train Losses: mse: 10.0573, mae: 2.3565, huber: 1.9297, swd: 3.2724, ept: 57.3413
+    Epoch [12/50], Val Losses: mse: 9.6160, mae: 2.3122, huber: 1.8837, swd: 3.6944, ept: 57.8306
+    Epoch [12/50], Test Losses: mse: 10.4596, mae: 2.3886, huber: 1.9616, swd: 3.4645, ept: 57.1430
+      Epoch 12 composite train-obj: 1.929659
+            Val objective improved 1.9022 → 1.8837, saving checkpoint.
+    Epoch [13/50], Train Losses: mse: 9.9718, mae: 2.3441, huber: 1.9181, swd: 3.2192, ept: 57.6042
+    Epoch [13/50], Val Losses: mse: 9.6008, mae: 2.3135, huber: 1.8852, swd: 3.5839, ept: 57.6562
+    Epoch [13/50], Test Losses: mse: 10.3547, mae: 2.3713, huber: 1.9446, swd: 3.3174, ept: 57.3813
+      Epoch 13 composite train-obj: 1.918145
+            No improvement (1.8852), counter 1/5
+    Epoch [14/50], Train Losses: mse: 9.9183, mae: 2.3373, huber: 1.9118, swd: 3.1733, ept: 57.6800
+    Epoch [14/50], Val Losses: mse: 9.5852, mae: 2.3037, huber: 1.8759, swd: 3.5817, ept: 58.4143
+    Epoch [14/50], Test Losses: mse: 10.4124, mae: 2.3888, huber: 1.9620, swd: 3.3784, ept: 57.0304
+      Epoch 14 composite train-obj: 1.911757
+            Val objective improved 1.8837 → 1.8759, saving checkpoint.
+    Epoch [15/50], Train Losses: mse: 9.8371, mae: 2.3269, huber: 1.9021, swd: 3.1492, ept: 57.9864
+    Epoch [15/50], Val Losses: mse: 9.6616, mae: 2.3023, huber: 1.8767, swd: 3.6071, ept: 58.6067
+    Epoch [15/50], Test Losses: mse: 10.5122, mae: 2.3786, huber: 1.9546, swd: 3.3876, ept: 57.3563
+      Epoch 15 composite train-obj: 1.902090
+            No improvement (1.8767), counter 1/5
+    Epoch [16/50], Train Losses: mse: 9.7908, mae: 2.3203, huber: 1.8959, swd: 3.0969, ept: 57.9662
+    Epoch [16/50], Val Losses: mse: 9.5481, mae: 2.2941, huber: 1.8678, swd: 3.4512, ept: 58.5762
+    Epoch [16/50], Test Losses: mse: 10.4374, mae: 2.3716, huber: 1.9466, swd: 3.2222, ept: 57.4281
+      Epoch 16 composite train-obj: 1.895859
+            Val objective improved 1.8759 → 1.8678, saving checkpoint.
+    Epoch [17/50], Train Losses: mse: 9.7189, mae: 2.3098, huber: 1.8859, swd: 3.0667, ept: 58.2162
+    Epoch [17/50], Val Losses: mse: 9.5554, mae: 2.2969, huber: 1.8703, swd: 3.4870, ept: 58.5932
+    Epoch [17/50], Test Losses: mse: 10.3570, mae: 2.3633, huber: 1.9390, swd: 3.2770, ept: 57.2217
+      Epoch 17 composite train-obj: 1.885901
+            No improvement (1.8703), counter 1/5
+    Epoch [18/50], Train Losses: mse: 9.6774, mae: 2.3038, huber: 1.8805, swd: 3.0329, ept: 58.3196
+    Epoch [18/50], Val Losses: mse: 9.6012, mae: 2.3059, huber: 1.8796, swd: 3.5219, ept: 58.6088
+    Epoch [18/50], Test Losses: mse: 10.3621, mae: 2.3596, huber: 1.9354, swd: 3.2624, ept: 57.4926
+      Epoch 18 composite train-obj: 1.880537
+            No improvement (1.8796), counter 2/5
+    Epoch [19/50], Train Losses: mse: 9.6414, mae: 2.3006, huber: 1.8775, swd: 3.0083, ept: 58.2998
+    Epoch [19/50], Val Losses: mse: 9.3909, mae: 2.2734, huber: 1.8494, swd: 3.1030, ept: 58.5970
+    Epoch [19/50], Test Losses: mse: 10.3110, mae: 2.3546, huber: 1.9309, swd: 2.9745, ept: 57.9317
+      Epoch 19 composite train-obj: 1.877477
+            Val objective improved 1.8678 → 1.8494, saving checkpoint.
+    Epoch [20/50], Train Losses: mse: 9.5929, mae: 2.2929, huber: 1.8703, swd: 2.9673, ept: 58.5098
+    Epoch [20/50], Val Losses: mse: 9.3991, mae: 2.2796, huber: 1.8552, swd: 3.3680, ept: 58.7004
+    Epoch [20/50], Test Losses: mse: 10.1921, mae: 2.3444, huber: 1.9214, swd: 3.1662, ept: 57.8639
+      Epoch 20 composite train-obj: 1.870267
+            No improvement (1.8552), counter 1/5
+    Epoch [21/50], Train Losses: mse: 9.5434, mae: 2.2864, huber: 1.8641, swd: 2.9346, ept: 58.5861
+    Epoch [21/50], Val Losses: mse: 9.4058, mae: 2.2805, huber: 1.8556, swd: 3.3372, ept: 58.9031
+    Epoch [21/50], Test Losses: mse: 10.1953, mae: 2.3488, huber: 1.9247, swd: 3.1942, ept: 57.5773
+      Epoch 21 composite train-obj: 1.864147
+            No improvement (1.8556), counter 2/5
+    Epoch [22/50], Train Losses: mse: 9.5107, mae: 2.2819, huber: 1.8599, swd: 2.9145, ept: 58.6370
+    Epoch [22/50], Val Losses: mse: 9.4486, mae: 2.2877, huber: 1.8623, swd: 3.2183, ept: 59.0649
+    Epoch [22/50], Test Losses: mse: 10.1446, mae: 2.3389, huber: 1.9159, swd: 3.0471, ept: 57.6472
+      Epoch 22 composite train-obj: 1.859891
+            No improvement (1.8623), counter 3/5
+    Epoch [23/50], Train Losses: mse: 9.4647, mae: 2.2754, huber: 1.8541, swd: 2.8872, ept: 58.6966
+    Epoch [23/50], Val Losses: mse: 9.6341, mae: 2.3079, huber: 1.8824, swd: 3.3762, ept: 59.0426
+    Epoch [23/50], Test Losses: mse: 10.2753, mae: 2.3586, huber: 1.9355, swd: 3.2267, ept: 57.4153
+      Epoch 23 composite train-obj: 1.854106
+            No improvement (1.8824), counter 4/5
+    Epoch [24/50], Train Losses: mse: 9.4287, mae: 2.2716, huber: 1.8503, swd: 2.8683, ept: 58.7881
+    Epoch [24/50], Val Losses: mse: 9.2583, mae: 2.2514, huber: 1.8285, swd: 3.1383, ept: 59.8245
+    Epoch [24/50], Test Losses: mse: 10.1602, mae: 2.3328, huber: 1.9106, swd: 2.9896, ept: 57.8806
+      Epoch 24 composite train-obj: 1.850272
+            Val objective improved 1.8494 → 1.8285, saving checkpoint.
+    Epoch [25/50], Train Losses: mse: 9.4123, mae: 2.2673, huber: 1.8464, swd: 2.8348, ept: 58.9399
+    Epoch [25/50], Val Losses: mse: 9.4614, mae: 2.2845, huber: 1.8601, swd: 3.1672, ept: 59.0018
+    Epoch [25/50], Test Losses: mse: 10.0954, mae: 2.3197, huber: 1.8984, swd: 2.9307, ept: 58.2124
+      Epoch 25 composite train-obj: 1.846450
+            No improvement (1.8601), counter 1/5
+    Epoch [26/50], Train Losses: mse: 9.3818, mae: 2.2640, huber: 1.8432, swd: 2.8113, ept: 58.9878
+    Epoch [26/50], Val Losses: mse: 9.2515, mae: 2.2618, huber: 1.8383, swd: 3.2273, ept: 59.0640
+    Epoch [26/50], Test Losses: mse: 10.1024, mae: 2.3360, huber: 1.9142, swd: 3.1226, ept: 58.2606
+      Epoch 26 composite train-obj: 1.843232
+            No improvement (1.8383), counter 2/5
+    Epoch [27/50], Train Losses: mse: 9.3496, mae: 2.2605, huber: 1.8400, swd: 2.7938, ept: 58.9419
+    Epoch [27/50], Val Losses: mse: 9.4044, mae: 2.2742, huber: 1.8518, swd: 3.2910, ept: 59.7202
+    Epoch [27/50], Test Losses: mse: 10.1770, mae: 2.3408, huber: 1.9199, swd: 3.0929, ept: 57.6205
+      Epoch 27 composite train-obj: 1.839973
+            No improvement (1.8518), counter 3/5
+    Epoch [28/50], Train Losses: mse: 9.3077, mae: 2.2544, huber: 1.8342, swd: 2.7856, ept: 59.0890
+    Epoch [28/50], Val Losses: mse: 9.4999, mae: 2.2842, huber: 1.8601, swd: 3.1096, ept: 59.6764
+    Epoch [28/50], Test Losses: mse: 10.1621, mae: 2.3377, huber: 1.9152, swd: 2.9452, ept: 57.5962
+      Epoch 28 composite train-obj: 1.834210
+            No improvement (1.8601), counter 4/5
+    Epoch [29/50], Train Losses: mse: 9.3068, mae: 2.2529, huber: 1.8331, swd: 2.7512, ept: 59.0770
+    Epoch [29/50], Val Losses: mse: 9.1797, mae: 2.2539, huber: 1.8311, swd: 3.0157, ept: 59.5227
+    Epoch [29/50], Test Losses: mse: 10.0153, mae: 2.3268, huber: 1.9046, swd: 2.9170, ept: 58.0180
+      Epoch 29 composite train-obj: 1.833122
+    Epoch [29/50], Test Losses: mse: 10.1602, mae: 2.3328, huber: 1.9106, swd: 2.9896, ept: 57.8806
+    Best round's Test MSE: 10.1602, MAE: 2.3328, SWD: 2.9896
+    Best round's Validation MSE: 9.2583, MAE: 2.2514, SWD: 3.1383
+    Best round's Test verification MSE : 10.1602, MAE: 2.3328, SWD: 2.9896
+    Time taken: 30.11 seconds
+    
+    ==================================================
+    Experiment Summary (DLinear_lorenz96_seq336_pred96_20250512_2138)
+    ==================================================
+    Number of runs: 3
+    Seeds: [1955, 7, 20]
+    
+    Test Performance at Best Validation (mean ± std):
+      mse: 10.0714 ± 0.0648
+      mae: 2.3307 ± 0.0023
+      huber: 1.9079 ± 0.0025
+      swd: 3.1504 ± 0.1137
+      ept: 58.0789 ± 0.1522
+      count: 12.0000 ± 0.0000
+    
+    Corresponding Validation Performance (mean ± std):
+      mse: 9.1966 ± 0.0479
+      mae: 2.2555 ± 0.0067
+      huber: 1.8322 ± 0.0060
+      swd: 3.3197 ± 0.1358
+      ept: 59.8256 ± 0.3895
+      count: 12.0000 ± 0.0000
+    ==================================================
+    Three seeds Time taken: 105.32 seconds
+    
+    Experiment complete: DLinear_lorenz96_seq336_pred96_20250512_2138
+    Model: DLinear
+    Dataset: lorenz96
+    Sequence Length: 336
+    Prediction Length: 96
+    Seeds: [1955, 7, 20]
+    
+
+#### pred=196
+
+
+```python
+importlib.reload(monotonic)
+importlib.reload(train_config)
+utils.reload_modules([utils])
+cfg = train_config.FlatDLinearConfig(
+    seq_len=336,
+    pred_len=196,
+    channels=data_mgr.datasets['lorenz96']['channels'],
+    batch_size=128,
+    learning_rate=9e-4,
+    seeds=[1955, 7, 20],
+    epochs=50, 
+)
+exp = execute_model_evaluation('lorenz96', cfg, data_mgr, scale=False)
+```
+
+    Reloading modules...
+      Reloaded: utils
+    Module reload complete.
+    Shape of training data: torch.Size([13300, 6])
+    Shape of validation data: torch.Size([1900, 6])
+    Shape of testing data: torch.Size([3800, 6])
+    global_std.shape: torch.Size([6])
+    Global Std for lorenz96: tensor([3.6750, 3.6678, 3.7240, 3.7347, 3.8038, 3.5588], device='cuda:0')
+    Train set sample shapes: torch.Size([336, 6]), torch.Size([196, 6])
+    Validation set sample shapes: torch.Size([336, 6]), torch.Size([196, 6])
+    Test set data shapes: torch.Size([3800, 6]), torch.Size([3800, 6])
+    Number of batches in train_loader: 100
+    Batch 0: Data shape torch.Size([128, 336, 6]), Target shape torch.Size([128, 196, 6])
+    
+    ==================================================
+    Data Preparation: lorenz96
+    ==================================================
+    Sequence Length: 336
+    Prediction Length: 196
+    Batch Size: 128
+    Scaling: No
+    Train Split: 0.7
+    Val Split: 0.8
+    Training Batches: 100
+    Validation Batches: 11
+    Test Batches: 26
+    ==================================================
+    
+    ==================================================
+     Running experiment with seed 1955 (1/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 14.0947, mae: 3.0001, huber: 2.5360, swd: 5.2752, ept: 40.7863
+    Epoch [1/50], Val Losses: mse: 13.7856, mae: 2.9452, huber: 2.4826, swd: 6.2049, ept: 54.8652
+    Epoch [1/50], Test Losses: mse: 13.7966, mae: 2.9199, huber: 2.4602, swd: 5.1310, ept: 55.4400
+      Epoch 1 composite train-obj: 2.536041
+            Val objective improved inf → 2.4826, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 12.8186, mae: 2.8242, huber: 2.3663, swd: 4.8415, ept: 59.3061
+    Epoch [2/50], Val Losses: mse: 13.4735, mae: 2.8862, huber: 2.4283, swd: 5.4872, ept: 59.6712
+    Epoch [2/50], Test Losses: mse: 13.5128, mae: 2.8647, huber: 2.4089, swd: 4.5397, ept: 60.3811
+      Epoch 2 composite train-obj: 2.366333
+            Val objective improved 2.4826 → 2.4283, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 12.5601, mae: 2.7798, huber: 2.3253, swd: 4.5995, ept: 62.4307
+    Epoch [3/50], Val Losses: mse: 13.1003, mae: 2.8400, huber: 2.3847, swd: 5.3673, ept: 60.7484
+    Epoch [3/50], Test Losses: mse: 13.2229, mae: 2.8252, huber: 2.3720, swd: 4.4005, ept: 62.0269
+      Epoch 3 composite train-obj: 2.325272
+            Val objective improved 2.4283 → 2.3847, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 12.3651, mae: 2.7503, huber: 2.2980, swd: 4.4509, ept: 63.7805
+    Epoch [4/50], Val Losses: mse: 12.6819, mae: 2.7886, huber: 2.3347, swd: 5.5255, ept: 63.2330
+    Epoch [4/50], Test Losses: mse: 13.2235, mae: 2.8258, huber: 2.3737, swd: 4.6678, ept: 62.6516
+      Epoch 4 composite train-obj: 2.298040
+            Val objective improved 2.3847 → 2.3347, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 12.2071, mae: 2.7276, huber: 2.2769, swd: 4.3504, ept: 64.8131
+    Epoch [5/50], Val Losses: mse: 12.6519, mae: 2.7872, huber: 2.3337, swd: 5.1923, ept: 64.7548
+    Epoch [5/50], Test Losses: mse: 13.0131, mae: 2.7945, huber: 2.3435, swd: 4.3012, ept: 63.9258
+      Epoch 5 composite train-obj: 2.276909
+            Val objective improved 2.3347 → 2.3337, saving checkpoint.
+    Epoch [6/50], Train Losses: mse: 12.0927, mae: 2.7103, huber: 2.2608, swd: 4.2283, ept: 65.4155
+    Epoch [6/50], Val Losses: mse: 12.4159, mae: 2.7588, huber: 2.3067, swd: 5.0796, ept: 64.6135
+    Epoch [6/50], Test Losses: mse: 12.9237, mae: 2.7824, huber: 2.3323, swd: 4.2213, ept: 64.5055
+      Epoch 6 composite train-obj: 2.260786
+            Val objective improved 2.3337 → 2.3067, saving checkpoint.
+    Epoch [7/50], Train Losses: mse: 11.9791, mae: 2.6957, huber: 2.2470, swd: 4.1437, ept: 65.9303
+    Epoch [7/50], Val Losses: mse: 12.2822, mae: 2.7398, huber: 2.2886, swd: 5.0720, ept: 64.2523
+    Epoch [7/50], Test Losses: mse: 12.7769, mae: 2.7601, huber: 2.3112, swd: 4.2380, ept: 64.1986
+      Epoch 7 composite train-obj: 2.247022
+            Val objective improved 2.3067 → 2.2886, saving checkpoint.
+    Epoch [8/50], Train Losses: mse: 11.8713, mae: 2.6815, huber: 2.2336, swd: 4.0719, ept: 66.3348
+    Epoch [8/50], Val Losses: mse: 12.2978, mae: 2.7358, huber: 2.2845, swd: 4.9644, ept: 67.1748
+    Epoch [8/50], Test Losses: mse: 12.6988, mae: 2.7521, huber: 2.3031, swd: 4.1001, ept: 64.8174
+      Epoch 8 composite train-obj: 2.233613
+            Val objective improved 2.2886 → 2.2845, saving checkpoint.
+    Epoch [9/50], Train Losses: mse: 11.7772, mae: 2.6691, huber: 2.2218, swd: 3.9903, ept: 67.0217
+    Epoch [9/50], Val Losses: mse: 12.1190, mae: 2.7150, huber: 2.2651, swd: 4.8278, ept: 66.0474
+    Epoch [9/50], Test Losses: mse: 12.5518, mae: 2.7393, huber: 2.2915, swd: 4.0443, ept: 65.2868
+      Epoch 9 composite train-obj: 2.221823
+            Val objective improved 2.2845 → 2.2651, saving checkpoint.
+    Epoch [10/50], Train Losses: mse: 11.6829, mae: 2.6562, huber: 2.2097, swd: 3.9187, ept: 67.3427
+    Epoch [10/50], Val Losses: mse: 12.0952, mae: 2.7108, huber: 2.2618, swd: 4.8704, ept: 65.3985
+    Epoch [10/50], Test Losses: mse: 12.6073, mae: 2.7409, huber: 2.2931, swd: 4.0949, ept: 65.2064
+      Epoch 10 composite train-obj: 2.209750
+            Val objective improved 2.2651 → 2.2618, saving checkpoint.
+    Epoch [11/50], Train Losses: mse: 11.6114, mae: 2.6474, huber: 2.2013, swd: 3.8421, ept: 67.5194
+    Epoch [11/50], Val Losses: mse: 11.9804, mae: 2.7013, huber: 2.2522, swd: 4.8259, ept: 67.3412
+    Epoch [11/50], Test Losses: mse: 12.5470, mae: 2.7346, huber: 2.2873, swd: 4.0471, ept: 65.4955
+      Epoch 11 composite train-obj: 2.201315
+            Val objective improved 2.2618 → 2.2522, saving checkpoint.
+    Epoch [12/50], Train Losses: mse: 11.5488, mae: 2.6395, huber: 2.1937, swd: 3.7754, ept: 67.7033
+    Epoch [12/50], Val Losses: mse: 11.7084, mae: 2.6737, huber: 2.2237, swd: 4.6606, ept: 67.9809
+    Epoch [12/50], Test Losses: mse: 12.3266, mae: 2.7146, huber: 2.2673, swd: 3.9579, ept: 65.8087
+      Epoch 12 composite train-obj: 2.193683
+            Val objective improved 2.2522 → 2.2237, saving checkpoint.
+    Epoch [13/50], Train Losses: mse: 11.4553, mae: 2.6282, huber: 2.1828, swd: 3.7299, ept: 68.1404
+    Epoch [13/50], Val Losses: mse: 11.7045, mae: 2.6730, huber: 2.2246, swd: 4.4730, ept: 67.2607
+    Epoch [13/50], Test Losses: mse: 12.3870, mae: 2.7153, huber: 2.2682, swd: 3.7631, ept: 65.6074
+      Epoch 13 composite train-obj: 2.182772
+            No improvement (2.2246), counter 1/5
+    Epoch [14/50], Train Losses: mse: 11.4154, mae: 2.6224, huber: 2.1774, swd: 3.6607, ept: 68.3871
+    Epoch [14/50], Val Losses: mse: 11.9157, mae: 2.6983, huber: 2.2497, swd: 4.4772, ept: 66.4383
+    Epoch [14/50], Test Losses: mse: 12.4622, mae: 2.7263, huber: 2.2794, swd: 3.7081, ept: 65.3921
+      Epoch 14 composite train-obj: 2.177390
+            No improvement (2.2497), counter 2/5
+    Epoch [15/50], Train Losses: mse: 11.3354, mae: 2.6121, huber: 2.1675, swd: 3.6028, ept: 68.4746
+    Epoch [15/50], Val Losses: mse: 11.7131, mae: 2.6809, huber: 2.2315, swd: 4.5344, ept: 68.3124
+    Epoch [15/50], Test Losses: mse: 12.2070, mae: 2.6998, huber: 2.2538, swd: 3.8357, ept: 66.5689
+      Epoch 15 composite train-obj: 2.167460
+            No improvement (2.2315), counter 3/5
+    Epoch [16/50], Train Losses: mse: 11.2847, mae: 2.6061, huber: 2.1617, swd: 3.5530, ept: 68.6976
+    Epoch [16/50], Val Losses: mse: 11.4664, mae: 2.6454, huber: 2.1969, swd: 4.3007, ept: 68.1921
+    Epoch [16/50], Test Losses: mse: 12.2452, mae: 2.7012, huber: 2.2547, swd: 3.6023, ept: 66.0342
+      Epoch 16 composite train-obj: 2.161695
+            Val objective improved 2.2237 → 2.1969, saving checkpoint.
+    Epoch [17/50], Train Losses: mse: 11.2297, mae: 2.5993, huber: 2.1552, swd: 3.4985, ept: 68.6857
+    Epoch [17/50], Val Losses: mse: 11.5356, mae: 2.6542, huber: 2.2062, swd: 4.3215, ept: 67.4729
+    Epoch [17/50], Test Losses: mse: 12.2473, mae: 2.7015, huber: 2.2556, swd: 3.6898, ept: 66.0951
+      Epoch 17 composite train-obj: 2.155212
+            No improvement (2.2062), counter 1/5
+    Epoch [18/50], Train Losses: mse: 11.1928, mae: 2.5946, huber: 2.1507, swd: 3.4422, ept: 68.9158
+    Epoch [18/50], Val Losses: mse: 11.5232, mae: 2.6415, huber: 2.1936, swd: 4.2470, ept: 69.3597
+    Epoch [18/50], Test Losses: mse: 12.3175, mae: 2.7027, huber: 2.2568, swd: 3.6463, ept: 65.2642
+      Epoch 18 composite train-obj: 2.150680
+            Val objective improved 2.1969 → 2.1936, saving checkpoint.
+    Epoch [19/50], Train Losses: mse: 11.1397, mae: 2.5885, huber: 2.1446, swd: 3.4152, ept: 69.2055
+    Epoch [19/50], Val Losses: mse: 11.6367, mae: 2.6517, huber: 2.2053, swd: 4.4042, ept: 68.3593
+    Epoch [19/50], Test Losses: mse: 12.3350, mae: 2.7082, huber: 2.2629, swd: 3.7844, ept: 65.8266
+      Epoch 19 composite train-obj: 2.144629
+            No improvement (2.2053), counter 1/5
+    Epoch [20/50], Train Losses: mse: 11.1163, mae: 2.5842, huber: 2.1408, swd: 3.3590, ept: 69.1921
+    Epoch [20/50], Val Losses: mse: 11.2699, mae: 2.6245, huber: 2.1781, swd: 4.2942, ept: 67.5226
+    Epoch [20/50], Test Losses: mse: 12.0058, mae: 2.6765, huber: 2.2316, swd: 3.7014, ept: 66.3638
+      Epoch 20 composite train-obj: 2.140821
+            Val objective improved 2.1936 → 2.1781, saving checkpoint.
+    Epoch [21/50], Train Losses: mse: 11.0688, mae: 2.5788, huber: 2.1356, swd: 3.3119, ept: 69.2585
+    Epoch [21/50], Val Losses: mse: 11.6552, mae: 2.6707, huber: 2.2229, swd: 4.2886, ept: 68.1112
+    Epoch [21/50], Test Losses: mse: 12.0522, mae: 2.6897, huber: 2.2441, swd: 3.6512, ept: 65.1300
+      Epoch 21 composite train-obj: 2.135586
+            No improvement (2.2229), counter 1/5
+    Epoch [22/50], Train Losses: mse: 11.0429, mae: 2.5763, huber: 2.1332, swd: 3.2832, ept: 69.3356
+    Epoch [22/50], Val Losses: mse: 11.2727, mae: 2.6245, huber: 2.1774, swd: 4.0874, ept: 69.0334
+    Epoch [22/50], Test Losses: mse: 12.1268, mae: 2.6963, huber: 2.2503, swd: 3.5644, ept: 65.0719
+      Epoch 22 composite train-obj: 2.133223
+            Val objective improved 2.1781 → 2.1774, saving checkpoint.
+    Epoch [23/50], Train Losses: mse: 10.9982, mae: 2.5703, huber: 2.1274, swd: 3.2398, ept: 69.2384
+    Epoch [23/50], Val Losses: mse: 11.3666, mae: 2.6217, huber: 2.1757, swd: 4.1188, ept: 69.5247
+    Epoch [23/50], Test Losses: mse: 12.0895, mae: 2.6791, huber: 2.2340, swd: 3.5929, ept: 66.7211
+      Epoch 23 composite train-obj: 2.127376
+            Val objective improved 2.1774 → 2.1757, saving checkpoint.
+    Epoch [24/50], Train Losses: mse: 10.9655, mae: 2.5650, huber: 2.1224, swd: 3.2013, ept: 69.6067
+    Epoch [24/50], Val Losses: mse: 11.6715, mae: 2.6684, huber: 2.2207, swd: 4.1570, ept: 67.8701
+    Epoch [24/50], Test Losses: mse: 12.1280, mae: 2.6866, huber: 2.2418, swd: 3.5658, ept: 65.8013
+      Epoch 24 composite train-obj: 2.122402
+            No improvement (2.2207), counter 1/5
+    Epoch [25/50], Train Losses: mse: 10.9353, mae: 2.5618, huber: 2.1193, swd: 3.1681, ept: 69.6779
+    Epoch [25/50], Val Losses: mse: 11.3576, mae: 2.6266, huber: 2.1809, swd: 4.0224, ept: 68.9486
+    Epoch [25/50], Test Losses: mse: 12.2223, mae: 2.7000, huber: 2.2548, swd: 3.5114, ept: 65.4267
+      Epoch 25 composite train-obj: 2.119291
+            No improvement (2.1809), counter 2/5
+    Epoch [26/50], Train Losses: mse: 10.9266, mae: 2.5598, huber: 2.1175, swd: 3.1321, ept: 69.6371
+    Epoch [26/50], Val Losses: mse: 11.2033, mae: 2.6145, huber: 2.1677, swd: 3.9187, ept: 69.8378
+    Epoch [26/50], Test Losses: mse: 12.0732, mae: 2.6846, huber: 2.2391, swd: 3.3946, ept: 65.2435
+      Epoch 26 composite train-obj: 2.117469
+            Val objective improved 2.1757 → 2.1677, saving checkpoint.
+    Epoch [27/50], Train Losses: mse: 10.8989, mae: 2.5562, huber: 2.1141, swd: 3.1053, ept: 69.6222
+    Epoch [27/50], Val Losses: mse: 11.3315, mae: 2.6303, huber: 2.1832, swd: 3.8526, ept: 70.2139
+    Epoch [27/50], Test Losses: mse: 12.0051, mae: 2.6748, huber: 2.2299, swd: 3.3302, ept: 65.9268
+      Epoch 27 composite train-obj: 2.114061
+            No improvement (2.1832), counter 1/5
+    Epoch [28/50], Train Losses: mse: 10.8513, mae: 2.5508, huber: 2.1089, swd: 3.0748, ept: 69.9527
+    Epoch [28/50], Val Losses: mse: 11.1416, mae: 2.6093, huber: 2.1616, swd: 3.8430, ept: 70.7191
+    Epoch [28/50], Test Losses: mse: 11.8620, mae: 2.6675, huber: 2.2219, swd: 3.4354, ept: 66.8639
+      Epoch 28 composite train-obj: 2.108879
+            Val objective improved 2.1677 → 2.1616, saving checkpoint.
+    Epoch [29/50], Train Losses: mse: 10.8545, mae: 2.5508, huber: 2.1089, swd: 3.0376, ept: 69.9315
+    Epoch [29/50], Val Losses: mse: 11.2127, mae: 2.6233, huber: 2.1761, swd: 3.9864, ept: 70.4066
+    Epoch [29/50], Test Losses: mse: 11.8476, mae: 2.6649, huber: 2.2192, swd: 3.4895, ept: 66.5817
+      Epoch 29 composite train-obj: 2.108855
+            No improvement (2.1761), counter 1/5
+    Epoch [30/50], Train Losses: mse: 10.8263, mae: 2.5469, huber: 2.1051, swd: 3.0236, ept: 69.8572
+    Epoch [30/50], Val Losses: mse: 11.1279, mae: 2.6097, huber: 2.1634, swd: 3.7370, ept: 70.6491
+    Epoch [30/50], Test Losses: mse: 11.9070, mae: 2.6633, huber: 2.2187, swd: 3.2593, ept: 66.8710
+      Epoch 30 composite train-obj: 2.105112
+            No improvement (2.1634), counter 2/5
+    Epoch [31/50], Train Losses: mse: 10.8069, mae: 2.5440, huber: 2.1023, swd: 2.9860, ept: 70.0543
+    Epoch [31/50], Val Losses: mse: 11.2593, mae: 2.6182, huber: 2.1717, swd: 3.8865, ept: 69.1872
+    Epoch [31/50], Test Losses: mse: 11.9501, mae: 2.6687, huber: 2.2243, swd: 3.4565, ept: 66.0404
+      Epoch 31 composite train-obj: 2.102320
+            No improvement (2.1717), counter 3/5
+    Epoch [32/50], Train Losses: mse: 10.7886, mae: 2.5422, huber: 2.1007, swd: 2.9792, ept: 70.1147
+    Epoch [32/50], Val Losses: mse: 11.2005, mae: 2.6136, huber: 2.1669, swd: 3.7033, ept: 70.0392
+    Epoch [32/50], Test Losses: mse: 11.8621, mae: 2.6576, huber: 2.2131, swd: 3.2211, ept: 67.0977
+      Epoch 32 composite train-obj: 2.100656
+            No improvement (2.1669), counter 4/5
+    Epoch [33/50], Train Losses: mse: 10.7803, mae: 2.5409, huber: 2.0993, swd: 2.9376, ept: 70.2140
+    Epoch [33/50], Val Losses: mse: 11.2802, mae: 2.6177, huber: 2.1715, swd: 3.7836, ept: 71.0577
+    Epoch [33/50], Test Losses: mse: 12.0134, mae: 2.6700, huber: 2.2257, swd: 3.3219, ept: 66.4126
+      Epoch 33 composite train-obj: 2.099323
+    Epoch [33/50], Test Losses: mse: 11.8620, mae: 2.6675, huber: 2.2219, swd: 3.4354, ept: 66.8639
+    Best round's Test MSE: 11.8620, MAE: 2.6675, SWD: 3.4354
+    Best round's Validation MSE: 11.1416, MAE: 2.6093, SWD: 3.8430
+    Best round's Test verification MSE : 11.8620, MAE: 2.6675, SWD: 3.4354
+    Time taken: 38.11 seconds
+    
+    ==================================================
+     Running experiment with seed 7 (2/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 14.0854, mae: 2.9985, huber: 2.5345, swd: 5.3647, ept: 41.0152
+    Epoch [1/50], Val Losses: mse: 13.7330, mae: 2.9350, huber: 2.4725, swd: 6.0911, ept: 55.1384
+    Epoch [1/50], Test Losses: mse: 13.7181, mae: 2.9086, huber: 2.4491, swd: 4.9341, ept: 55.3082
+      Epoch 1 composite train-obj: 2.534507
+            Val objective improved inf → 2.4725, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 12.8370, mae: 2.8271, huber: 2.3690, swd: 4.8723, ept: 59.3986
+    Epoch [2/50], Val Losses: mse: 13.3921, mae: 2.8855, huber: 2.4277, swd: 5.7434, ept: 59.1120
+    Epoch [2/50], Test Losses: mse: 13.5816, mae: 2.8653, huber: 2.4096, swd: 4.6706, ept: 61.0929
+      Epoch 2 composite train-obj: 2.369001
+            Val objective improved 2.4725 → 2.4277, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 12.5456, mae: 2.7786, huber: 2.3241, swd: 4.6633, ept: 62.3215
+    Epoch [3/50], Val Losses: mse: 13.1521, mae: 2.8464, huber: 2.3908, swd: 5.5930, ept: 60.5339
+    Epoch [3/50], Test Losses: mse: 13.2978, mae: 2.8301, huber: 2.3762, swd: 4.5485, ept: 61.2343
+      Epoch 3 composite train-obj: 2.324131
+            Val objective improved 2.4277 → 2.3908, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 12.3736, mae: 2.7504, huber: 2.2981, swd: 4.4908, ept: 63.9288
+    Epoch [4/50], Val Losses: mse: 12.8025, mae: 2.8003, huber: 2.3457, swd: 5.5339, ept: 62.6041
+    Epoch [4/50], Test Losses: mse: 13.1290, mae: 2.8121, huber: 2.3599, swd: 4.5547, ept: 62.4293
+      Epoch 4 composite train-obj: 2.298101
+            Val objective improved 2.3908 → 2.3457, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 12.2189, mae: 2.7291, huber: 2.2784, swd: 4.3762, ept: 64.7701
+    Epoch [5/50], Val Losses: mse: 12.8510, mae: 2.8050, huber: 2.3522, swd: 5.3215, ept: 64.4232
+    Epoch [5/50], Test Losses: mse: 13.0082, mae: 2.7907, huber: 2.3399, swd: 4.3515, ept: 62.9162
+      Epoch 5 composite train-obj: 2.278398
+            No improvement (2.3522), counter 1/5
+    Epoch [6/50], Train Losses: mse: 12.1015, mae: 2.7118, huber: 2.2622, swd: 4.2670, ept: 65.6340
+    Epoch [6/50], Val Losses: mse: 12.5270, mae: 2.7618, huber: 2.3098, swd: 5.1993, ept: 64.7916
+    Epoch [6/50], Test Losses: mse: 12.8503, mae: 2.7769, huber: 2.3271, swd: 4.3430, ept: 63.5515
+      Epoch 6 composite train-obj: 2.262163
+            Val objective improved 2.3457 → 2.3098, saving checkpoint.
+    Epoch [7/50], Train Losses: mse: 11.9756, mae: 2.6941, huber: 2.2456, swd: 4.1894, ept: 65.9905
+    Epoch [7/50], Val Losses: mse: 12.3592, mae: 2.7530, huber: 2.3008, swd: 5.1457, ept: 64.9857
+    Epoch [7/50], Test Losses: mse: 12.6826, mae: 2.7555, huber: 2.3064, swd: 4.2505, ept: 65.0475
+      Epoch 7 composite train-obj: 2.245629
+            Val objective improved 2.3098 → 2.3008, saving checkpoint.
+    Epoch [8/50], Train Losses: mse: 11.8654, mae: 2.6810, huber: 2.2332, swd: 4.1051, ept: 66.5463
+    Epoch [8/50], Val Losses: mse: 12.3091, mae: 2.7432, huber: 2.2921, swd: 5.0143, ept: 64.7827
+    Epoch [8/50], Test Losses: mse: 12.7130, mae: 2.7587, huber: 2.3103, swd: 4.1818, ept: 64.4355
+      Epoch 8 composite train-obj: 2.233155
+            Val objective improved 2.3008 → 2.2921, saving checkpoint.
+    Epoch [9/50], Train Losses: mse: 11.7633, mae: 2.6670, huber: 2.2199, swd: 4.0186, ept: 66.8802
+    Epoch [9/50], Val Losses: mse: 12.2458, mae: 2.7214, huber: 2.2727, swd: 4.9828, ept: 66.2342
+    Epoch [9/50], Test Losses: mse: 12.7314, mae: 2.7562, huber: 2.3079, swd: 4.1759, ept: 64.7272
+      Epoch 9 composite train-obj: 2.219878
+            Val objective improved 2.2921 → 2.2727, saving checkpoint.
+    Epoch [10/50], Train Losses: mse: 11.7147, mae: 2.6603, huber: 2.2136, swd: 3.9420, ept: 67.1131
+    Epoch [10/50], Val Losses: mse: 11.9026, mae: 2.7028, huber: 2.2523, swd: 4.9743, ept: 65.0780
+    Epoch [10/50], Test Losses: mse: 12.5172, mae: 2.7335, huber: 2.2855, swd: 4.1622, ept: 65.4231
+      Epoch 10 composite train-obj: 2.213552
+            Val objective improved 2.2727 → 2.2523, saving checkpoint.
+    Epoch [11/50], Train Losses: mse: 11.6018, mae: 2.6463, huber: 2.2001, swd: 3.8735, ept: 67.6209
+    Epoch [11/50], Val Losses: mse: 11.9267, mae: 2.6999, huber: 2.2498, swd: 4.8443, ept: 68.0676
+    Epoch [11/50], Test Losses: mse: 12.3656, mae: 2.7142, huber: 2.2675, swd: 4.0354, ept: 66.1843
+      Epoch 11 composite train-obj: 2.200129
+            Val objective improved 2.2523 → 2.2498, saving checkpoint.
+    Epoch [12/50], Train Losses: mse: 11.5361, mae: 2.6377, huber: 2.1920, swd: 3.8133, ept: 67.8687
+    Epoch [12/50], Val Losses: mse: 11.8324, mae: 2.6788, huber: 2.2305, swd: 4.6734, ept: 65.9629
+    Epoch [12/50], Test Losses: mse: 12.5892, mae: 2.7340, huber: 2.2872, swd: 3.9540, ept: 65.9381
+      Epoch 12 composite train-obj: 2.191966
+            Val objective improved 2.2498 → 2.2305, saving checkpoint.
+    Epoch [13/50], Train Losses: mse: 11.4648, mae: 2.6293, huber: 2.1839, swd: 3.7464, ept: 68.0476
+    Epoch [13/50], Val Losses: mse: 11.9190, mae: 2.6910, huber: 2.2425, swd: 4.6629, ept: 66.1097
+    Epoch [13/50], Test Losses: mse: 12.3568, mae: 2.7120, huber: 2.2659, swd: 3.8874, ept: 65.8432
+      Epoch 13 composite train-obj: 2.183919
+            No improvement (2.2425), counter 1/5
+    Epoch [14/50], Train Losses: mse: 11.4112, mae: 2.6218, huber: 2.1768, swd: 3.6792, ept: 68.3165
+    Epoch [14/50], Val Losses: mse: 11.8134, mae: 2.6827, huber: 2.2343, swd: 4.5736, ept: 65.4618
+    Epoch [14/50], Test Losses: mse: 12.3615, mae: 2.7139, huber: 2.2670, swd: 3.8035, ept: 66.1787
+      Epoch 14 composite train-obj: 2.176805
+            No improvement (2.2343), counter 2/5
+    Epoch [15/50], Train Losses: mse: 11.3359, mae: 2.6126, huber: 2.1679, swd: 3.6218, ept: 68.4759
+    Epoch [15/50], Val Losses: mse: 11.3627, mae: 2.6285, huber: 2.1801, swd: 4.4398, ept: 69.3991
+    Epoch [15/50], Test Losses: mse: 12.3713, mae: 2.7141, huber: 2.2676, swd: 3.7990, ept: 66.3116
+      Epoch 15 composite train-obj: 2.167947
+            Val objective improved 2.2305 → 2.1801, saving checkpoint.
+    Epoch [16/50], Train Losses: mse: 11.2846, mae: 2.6057, huber: 2.1613, swd: 3.5769, ept: 68.7137
+    Epoch [16/50], Val Losses: mse: 11.7746, mae: 2.6750, huber: 2.2275, swd: 4.6875, ept: 67.3156
+    Epoch [16/50], Test Losses: mse: 12.3203, mae: 2.7064, huber: 2.2605, swd: 3.8650, ept: 64.8527
+      Epoch 16 composite train-obj: 2.161331
+            No improvement (2.2275), counter 1/5
+    Epoch [17/50], Train Losses: mse: 11.2439, mae: 2.6010, huber: 2.1568, swd: 3.5209, ept: 68.8177
+    Epoch [17/50], Val Losses: mse: 11.4921, mae: 2.6477, huber: 2.1991, swd: 4.3966, ept: 68.6368
+    Epoch [17/50], Test Losses: mse: 12.1090, mae: 2.6872, huber: 2.2404, swd: 3.7237, ept: 67.0284
+      Epoch 17 composite train-obj: 2.156844
+            No improvement (2.1991), counter 2/5
+    Epoch [18/50], Train Losses: mse: 11.1958, mae: 2.5947, huber: 2.1507, swd: 3.4566, ept: 69.1138
+    Epoch [18/50], Val Losses: mse: 11.5572, mae: 2.6555, huber: 2.2078, swd: 4.1823, ept: 68.1526
+    Epoch [18/50], Test Losses: mse: 12.1230, mae: 2.6836, huber: 2.2381, swd: 3.4954, ept: 66.8033
+      Epoch 18 composite train-obj: 2.150746
+            No improvement (2.2078), counter 3/5
+    Epoch [19/50], Train Losses: mse: 11.1560, mae: 2.5901, huber: 2.1464, swd: 3.4255, ept: 68.8763
+    Epoch [19/50], Val Losses: mse: 11.5338, mae: 2.6487, huber: 2.2007, swd: 4.2301, ept: 69.0904
+    Epoch [19/50], Test Losses: mse: 12.0952, mae: 2.6861, huber: 2.2396, swd: 3.6438, ept: 66.3539
+      Epoch 19 composite train-obj: 2.146438
+            No improvement (2.2007), counter 4/5
+    Epoch [20/50], Train Losses: mse: 11.1035, mae: 2.5835, huber: 2.1401, swd: 3.3686, ept: 69.2496
+    Epoch [20/50], Val Losses: mse: 11.4705, mae: 2.6410, huber: 2.1938, swd: 4.2166, ept: 68.6645
+    Epoch [20/50], Test Losses: mse: 12.0856, mae: 2.6742, huber: 2.2298, swd: 3.5586, ept: 66.6794
+      Epoch 20 composite train-obj: 2.140084
+    Epoch [20/50], Test Losses: mse: 12.3713, mae: 2.7141, huber: 2.2676, swd: 3.7990, ept: 66.3116
+    Best round's Test MSE: 12.3713, MAE: 2.7141, SWD: 3.7990
+    Best round's Validation MSE: 11.3627, MAE: 2.6285, SWD: 4.4398
+    Best round's Test verification MSE : 12.3713, MAE: 2.7141, SWD: 3.7990
+    Time taken: 21.55 seconds
+    
+    ==================================================
+     Running experiment with seed 20 (3/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 14.0885, mae: 2.9979, huber: 2.5340, swd: 4.8917, ept: 40.7674
+    Epoch [1/50], Val Losses: mse: 13.7162, mae: 2.9311, huber: 2.4696, swd: 5.4919, ept: 55.4284
+    Epoch [1/50], Test Losses: mse: 13.7719, mae: 2.9211, huber: 2.4607, swd: 4.6528, ept: 55.7591
+      Epoch 1 composite train-obj: 2.533987
+            Val objective improved inf → 2.4696, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 12.8227, mae: 2.8252, huber: 2.3672, swd: 4.4829, ept: 59.2082
+    Epoch [2/50], Val Losses: mse: 13.2910, mae: 2.8706, huber: 2.4126, swd: 5.2876, ept: 60.0576
+    Epoch [2/50], Test Losses: mse: 13.4682, mae: 2.8602, huber: 2.4045, swd: 4.4340, ept: 59.3823
+      Epoch 2 composite train-obj: 2.367221
+            Val objective improved 2.4696 → 2.4126, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 12.5481, mae: 2.7798, huber: 2.3252, swd: 4.2591, ept: 62.2454
+    Epoch [3/50], Val Losses: mse: 13.0857, mae: 2.8384, huber: 2.3821, swd: 5.0256, ept: 60.4690
+    Epoch [3/50], Test Losses: mse: 13.2488, mae: 2.8235, huber: 2.3707, swd: 4.2552, ept: 61.1931
+      Epoch 3 composite train-obj: 2.325200
+            Val objective improved 2.4126 → 2.3821, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 12.3704, mae: 2.7504, huber: 2.2981, swd: 4.1180, ept: 63.7957
+    Epoch [4/50], Val Losses: mse: 12.9638, mae: 2.8229, huber: 2.3684, swd: 4.8285, ept: 61.0954
+    Epoch [4/50], Test Losses: mse: 13.0708, mae: 2.8048, huber: 2.3532, swd: 4.0564, ept: 62.8643
+      Epoch 4 composite train-obj: 2.298119
+            Val objective improved 2.3821 → 2.3684, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 12.2323, mae: 2.7301, huber: 2.2793, swd: 4.0122, ept: 64.7599
+    Epoch [5/50], Val Losses: mse: 12.6305, mae: 2.7776, huber: 2.3253, swd: 4.7729, ept: 64.2981
+    Epoch [5/50], Test Losses: mse: 13.0294, mae: 2.7976, huber: 2.3475, swd: 4.0883, ept: 62.9405
+      Epoch 5 composite train-obj: 2.279313
+            Val objective improved 2.3684 → 2.3253, saving checkpoint.
+    Epoch [6/50], Train Losses: mse: 12.0899, mae: 2.7099, huber: 2.2605, swd: 3.9344, ept: 65.5077
+    Epoch [6/50], Val Losses: mse: 12.5945, mae: 2.7760, huber: 2.3231, swd: 4.6634, ept: 63.9744
+    Epoch [6/50], Test Losses: mse: 12.7657, mae: 2.7671, huber: 2.3173, swd: 3.9395, ept: 63.8663
+      Epoch 6 composite train-obj: 2.260466
+            Val objective improved 2.3253 → 2.3231, saving checkpoint.
+    Epoch [7/50], Train Losses: mse: 11.9822, mae: 2.6956, huber: 2.2471, swd: 3.8609, ept: 65.9306
+    Epoch [7/50], Val Losses: mse: 12.4440, mae: 2.7562, huber: 2.3050, swd: 4.6085, ept: 63.1934
+    Epoch [7/50], Test Losses: mse: 12.7255, mae: 2.7587, huber: 2.3093, swd: 3.8703, ept: 64.7192
+      Epoch 7 composite train-obj: 2.247143
+            Val objective improved 2.3231 → 2.3050, saving checkpoint.
+    Epoch [8/50], Train Losses: mse: 11.8679, mae: 2.6806, huber: 2.2327, swd: 3.7723, ept: 66.5780
+    Epoch [8/50], Val Losses: mse: 12.2815, mae: 2.7356, huber: 2.2846, swd: 4.4858, ept: 65.2205
+    Epoch [8/50], Test Losses: mse: 12.6557, mae: 2.7511, huber: 2.3027, swd: 3.7937, ept: 64.9415
+      Epoch 8 composite train-obj: 2.232711
+            Val objective improved 2.3050 → 2.2846, saving checkpoint.
+    Epoch [9/50], Train Losses: mse: 11.7892, mae: 2.6705, huber: 2.2232, swd: 3.7079, ept: 66.8526
+    Epoch [9/50], Val Losses: mse: 12.0837, mae: 2.7116, huber: 2.2621, swd: 4.3985, ept: 65.0238
+    Epoch [9/50], Test Losses: mse: 12.6536, mae: 2.7497, huber: 2.3009, swd: 3.7265, ept: 64.2834
+      Epoch 9 composite train-obj: 2.223218
+            Val objective improved 2.2846 → 2.2621, saving checkpoint.
+    Epoch [10/50], Train Losses: mse: 11.6920, mae: 2.6578, huber: 2.2112, swd: 3.6406, ept: 67.3364
+    Epoch [10/50], Val Losses: mse: 11.9966, mae: 2.7040, huber: 2.2545, swd: 4.2713, ept: 66.3769
+    Epoch [10/50], Test Losses: mse: 12.5952, mae: 2.7384, huber: 2.2906, swd: 3.6326, ept: 65.9289
+      Epoch 10 composite train-obj: 2.211167
+            Val objective improved 2.2621 → 2.2545, saving checkpoint.
+    Epoch [11/50], Train Losses: mse: 11.6113, mae: 2.6469, huber: 2.2007, swd: 3.5839, ept: 67.6126
+    Epoch [11/50], Val Losses: mse: 12.0111, mae: 2.7059, huber: 2.2559, swd: 4.3095, ept: 66.2701
+    Epoch [11/50], Test Losses: mse: 12.4824, mae: 2.7240, huber: 2.2768, swd: 3.6401, ept: 65.1090
+      Epoch 11 composite train-obj: 2.200707
+            No improvement (2.2559), counter 1/5
+    Epoch [12/50], Train Losses: mse: 11.5401, mae: 2.6384, huber: 2.1926, swd: 3.5419, ept: 67.8732
+    Epoch [12/50], Val Losses: mse: 11.9676, mae: 2.6979, huber: 2.2485, swd: 4.2132, ept: 67.2811
+    Epoch [12/50], Test Losses: mse: 12.5308, mae: 2.7228, huber: 2.2763, swd: 3.5971, ept: 66.3195
+      Epoch 12 composite train-obj: 2.192625
+            Val objective improved 2.2545 → 2.2485, saving checkpoint.
+    Epoch [13/50], Train Losses: mse: 11.4722, mae: 2.6300, huber: 2.1846, swd: 3.4694, ept: 68.0122
+    Epoch [13/50], Val Losses: mse: 11.7456, mae: 2.6809, huber: 2.2319, swd: 4.1036, ept: 66.0301
+    Epoch [13/50], Test Losses: mse: 12.2476, mae: 2.7033, huber: 2.2568, swd: 3.4747, ept: 65.2203
+      Epoch 13 composite train-obj: 2.184598
+            Val objective improved 2.2485 → 2.2319, saving checkpoint.
+    Epoch [14/50], Train Losses: mse: 11.4076, mae: 2.6223, huber: 2.1772, swd: 3.4257, ept: 68.1658
+    Epoch [14/50], Val Losses: mse: 11.6600, mae: 2.6623, huber: 2.2136, swd: 4.1179, ept: 68.4726
+    Epoch [14/50], Test Losses: mse: 12.2837, mae: 2.7014, huber: 2.2555, swd: 3.5340, ept: 65.9946
+      Epoch 14 composite train-obj: 2.177194
+            Val objective improved 2.2319 → 2.2136, saving checkpoint.
+    Epoch [15/50], Train Losses: mse: 11.3517, mae: 2.6146, huber: 2.1700, swd: 3.3909, ept: 68.2220
+    Epoch [15/50], Val Losses: mse: 11.6158, mae: 2.6504, huber: 2.2024, swd: 3.9524, ept: 67.1285
+    Epoch [15/50], Test Losses: mse: 12.2611, mae: 2.6967, huber: 2.2504, swd: 3.4009, ept: 66.7275
+      Epoch 15 composite train-obj: 2.169961
+            Val objective improved 2.2136 → 2.2024, saving checkpoint.
+    Epoch [16/50], Train Losses: mse: 11.2941, mae: 2.6069, huber: 2.1625, swd: 3.3319, ept: 68.5578
+    Epoch [16/50], Val Losses: mse: 11.7746, mae: 2.6739, huber: 2.2257, swd: 3.9914, ept: 68.7415
+    Epoch [16/50], Test Losses: mse: 12.2192, mae: 2.6952, huber: 2.2498, swd: 3.4259, ept: 66.4030
+      Epoch 16 composite train-obj: 2.162495
+            No improvement (2.2257), counter 1/5
+    Epoch [17/50], Train Losses: mse: 11.2372, mae: 2.6003, huber: 2.1562, swd: 3.2882, ept: 68.7179
+    Epoch [17/50], Val Losses: mse: 11.5184, mae: 2.6456, huber: 2.1986, swd: 3.9960, ept: 67.7986
+    Epoch [17/50], Test Losses: mse: 12.2665, mae: 2.7052, huber: 2.2598, swd: 3.4572, ept: 65.2652
+      Epoch 17 composite train-obj: 2.156160
+            Val objective improved 2.2024 → 2.1986, saving checkpoint.
+    Epoch [18/50], Train Losses: mse: 11.1973, mae: 2.5949, huber: 2.1510, swd: 3.2558, ept: 68.9342
+    Epoch [18/50], Val Losses: mse: 11.5651, mae: 2.6589, huber: 2.2102, swd: 3.9565, ept: 67.3300
+    Epoch [18/50], Test Losses: mse: 12.1857, mae: 2.6906, huber: 2.2452, swd: 3.4361, ept: 66.6815
+      Epoch 18 composite train-obj: 2.151003
+            No improvement (2.2102), counter 1/5
+    Epoch [19/50], Train Losses: mse: 11.1434, mae: 2.5891, huber: 2.1453, swd: 3.2088, ept: 68.9892
+    Epoch [19/50], Val Losses: mse: 11.4232, mae: 2.6400, huber: 2.1931, swd: 3.8547, ept: 67.8884
+    Epoch [19/50], Test Losses: mse: 12.0841, mae: 2.6794, huber: 2.2342, swd: 3.3535, ept: 67.0563
+      Epoch 19 composite train-obj: 2.145272
+            Val objective improved 2.1986 → 2.1931, saving checkpoint.
+    Epoch [20/50], Train Losses: mse: 11.1110, mae: 2.5845, huber: 2.1410, swd: 3.1592, ept: 69.1367
+    Epoch [20/50], Val Losses: mse: 11.5304, mae: 2.6448, huber: 2.1973, swd: 3.7642, ept: 67.9523
+    Epoch [20/50], Test Losses: mse: 12.2126, mae: 2.6977, huber: 2.2520, swd: 3.2844, ept: 65.2380
+      Epoch 20 composite train-obj: 2.141041
+            No improvement (2.1973), counter 1/5
+    Epoch [21/50], Train Losses: mse: 11.0682, mae: 2.5785, huber: 2.1353, swd: 3.1336, ept: 69.1724
+    Epoch [21/50], Val Losses: mse: 11.3178, mae: 2.6284, huber: 2.1814, swd: 3.7150, ept: 68.3583
+    Epoch [21/50], Test Losses: mse: 12.0211, mae: 2.6795, huber: 2.2334, swd: 3.2367, ept: 65.7874
+      Epoch 21 composite train-obj: 2.135295
+            Val objective improved 2.1931 → 2.1814, saving checkpoint.
+    Epoch [22/50], Train Losses: mse: 11.0364, mae: 2.5749, huber: 2.1318, swd: 3.0866, ept: 69.4192
+    Epoch [22/50], Val Losses: mse: 11.4033, mae: 2.6347, huber: 2.1880, swd: 3.8561, ept: 69.6062
+    Epoch [22/50], Test Losses: mse: 11.9326, mae: 2.6658, huber: 2.2211, swd: 3.3699, ept: 66.6296
+      Epoch 22 composite train-obj: 2.131756
+            No improvement (2.1880), counter 1/5
+    Epoch [23/50], Train Losses: mse: 10.9964, mae: 2.5701, huber: 2.1272, swd: 3.0752, ept: 69.3945
+    Epoch [23/50], Val Losses: mse: 11.3983, mae: 2.6285, huber: 2.1817, swd: 3.6687, ept: 68.7436
+    Epoch [23/50], Test Losses: mse: 12.1130, mae: 2.6856, huber: 2.2395, swd: 3.1904, ept: 66.4652
+      Epoch 23 composite train-obj: 2.127184
+            No improvement (2.1817), counter 2/5
+    Epoch [24/50], Train Losses: mse: 10.9760, mae: 2.5666, huber: 2.1240, swd: 3.0204, ept: 69.6605
+    Epoch [24/50], Val Losses: mse: 11.4790, mae: 2.6414, huber: 2.1945, swd: 3.8656, ept: 68.7265
+    Epoch [24/50], Test Losses: mse: 12.0738, mae: 2.6839, huber: 2.2385, swd: 3.3931, ept: 65.6773
+      Epoch 24 composite train-obj: 2.123990
+            No improvement (2.1945), counter 3/5
+    Epoch [25/50], Train Losses: mse: 10.9465, mae: 2.5635, huber: 2.1208, swd: 3.0000, ept: 69.5880
+    Epoch [25/50], Val Losses: mse: 11.3653, mae: 2.6368, huber: 2.1901, swd: 3.6727, ept: 67.5250
+    Epoch [25/50], Test Losses: mse: 12.0231, mae: 2.6728, huber: 2.2282, swd: 3.1947, ept: 66.2894
+      Epoch 25 composite train-obj: 2.120825
+            No improvement (2.1901), counter 4/5
+    Epoch [26/50], Train Losses: mse: 10.9214, mae: 2.5597, huber: 2.1174, swd: 2.9624, ept: 69.6523
+    Epoch [26/50], Val Losses: mse: 11.2359, mae: 2.6147, huber: 2.1679, swd: 3.6321, ept: 69.6288
+    Epoch [26/50], Test Losses: mse: 12.0944, mae: 2.6805, huber: 2.2355, swd: 3.2072, ept: 67.3619
+      Epoch 26 composite train-obj: 2.117378
+            Val objective improved 2.1814 → 2.1679, saving checkpoint.
+    Epoch [27/50], Train Losses: mse: 10.8898, mae: 2.5554, huber: 2.1132, swd: 2.9448, ept: 69.6986
+    Epoch [27/50], Val Losses: mse: 11.2216, mae: 2.6152, huber: 2.1692, swd: 3.5994, ept: 70.0490
+    Epoch [27/50], Test Losses: mse: 11.9277, mae: 2.6630, huber: 2.2184, swd: 3.1342, ept: 66.8121
+      Epoch 27 composite train-obj: 2.113201
+            No improvement (2.1692), counter 1/5
+    Epoch [28/50], Train Losses: mse: 10.8713, mae: 2.5528, huber: 2.1108, swd: 2.9132, ept: 70.0659
+    Epoch [28/50], Val Losses: mse: 11.1805, mae: 2.6106, huber: 2.1634, swd: 3.6074, ept: 70.8330
+    Epoch [28/50], Test Losses: mse: 12.0491, mae: 2.6803, huber: 2.2347, swd: 3.1837, ept: 64.6532
+      Epoch 28 composite train-obj: 2.110789
+            Val objective improved 2.1679 → 2.1634, saving checkpoint.
+    Epoch [29/50], Train Losses: mse: 10.8519, mae: 2.5508, huber: 2.1089, swd: 2.8916, ept: 69.9811
+    Epoch [29/50], Val Losses: mse: 11.0507, mae: 2.5955, huber: 2.1492, swd: 3.5046, ept: 69.9495
+    Epoch [29/50], Test Losses: mse: 12.0770, mae: 2.6835, huber: 2.2387, swd: 3.1580, ept: 66.2671
+      Epoch 29 composite train-obj: 2.108860
+            Val objective improved 2.1634 → 2.1492, saving checkpoint.
+    Epoch [30/50], Train Losses: mse: 10.8243, mae: 2.5470, huber: 2.1052, swd: 2.8620, ept: 69.9808
+    Epoch [30/50], Val Losses: mse: 11.4409, mae: 2.6387, huber: 2.1919, swd: 3.5419, ept: 68.0662
+    Epoch [30/50], Test Losses: mse: 12.0056, mae: 2.6718, huber: 2.2278, swd: 3.1348, ept: 67.2263
+      Epoch 30 composite train-obj: 2.105241
+            No improvement (2.1919), counter 1/5
+    Epoch [31/50], Train Losses: mse: 10.8132, mae: 2.5455, huber: 2.1038, swd: 2.8338, ept: 69.9192
+    Epoch [31/50], Val Losses: mse: 11.2311, mae: 2.6126, huber: 2.1674, swd: 3.5266, ept: 69.9563
+    Epoch [31/50], Test Losses: mse: 11.8249, mae: 2.6557, huber: 2.2109, swd: 3.0969, ept: 65.9216
+      Epoch 31 composite train-obj: 2.103796
+            No improvement (2.1674), counter 2/5
+    Epoch [32/50], Train Losses: mse: 10.7908, mae: 2.5425, huber: 2.1010, swd: 2.8276, ept: 70.1564
+    Epoch [32/50], Val Losses: mse: 11.4211, mae: 2.6334, huber: 2.1874, swd: 3.4538, ept: 69.1286
+    Epoch [32/50], Test Losses: mse: 11.9977, mae: 2.6695, huber: 2.2252, swd: 3.0436, ept: 66.1821
+      Epoch 32 composite train-obj: 2.101004
+            No improvement (2.1874), counter 3/5
+    Epoch [33/50], Train Losses: mse: 10.7998, mae: 2.5428, huber: 2.1013, swd: 2.7866, ept: 70.0382
+    Epoch [33/50], Val Losses: mse: 11.2616, mae: 2.6145, huber: 2.1685, swd: 3.5526, ept: 71.8011
+    Epoch [33/50], Test Losses: mse: 12.0814, mae: 2.6836, huber: 2.2394, swd: 3.1675, ept: 65.9187
+      Epoch 33 composite train-obj: 2.101324
+            No improvement (2.1685), counter 4/5
+    Epoch [34/50], Train Losses: mse: 10.7671, mae: 2.5385, huber: 2.0972, swd: 2.7753, ept: 70.0672
+    Epoch [34/50], Val Losses: mse: 10.9852, mae: 2.5906, huber: 2.1447, swd: 3.4920, ept: 70.0839
+    Epoch [34/50], Test Losses: mse: 11.8421, mae: 2.6628, huber: 2.2175, swd: 3.1715, ept: 66.4683
+      Epoch 34 composite train-obj: 2.097213
+            Val objective improved 2.1492 → 2.1447, saving checkpoint.
+    Epoch [35/50], Train Losses: mse: 10.7374, mae: 2.5340, huber: 2.0929, swd: 2.7720, ept: 70.2033
+    Epoch [35/50], Val Losses: mse: 11.0828, mae: 2.6020, huber: 2.1564, swd: 3.3936, ept: 71.2997
+    Epoch [35/50], Test Losses: mse: 11.8329, mae: 2.6560, huber: 2.2123, swd: 3.0102, ept: 66.5018
+      Epoch 35 composite train-obj: 2.092887
+            No improvement (2.1564), counter 1/5
+    Epoch [36/50], Train Losses: mse: 10.7440, mae: 2.5356, huber: 2.0946, swd: 2.7396, ept: 70.1288
+    Epoch [36/50], Val Losses: mse: 11.2138, mae: 2.6142, huber: 2.1681, swd: 3.3593, ept: 70.3726
+    Epoch [36/50], Test Losses: mse: 11.8655, mae: 2.6620, huber: 2.2171, swd: 2.9716, ept: 66.0323
+      Epoch 36 composite train-obj: 2.094559
+            No improvement (2.1681), counter 2/5
+    Epoch [37/50], Train Losses: mse: 10.7235, mae: 2.5324, huber: 2.0914, swd: 2.7278, ept: 70.2638
+    Epoch [37/50], Val Losses: mse: 11.2882, mae: 2.6157, huber: 2.1711, swd: 3.3675, ept: 70.9586
+    Epoch [37/50], Test Losses: mse: 11.9632, mae: 2.6701, huber: 2.2255, swd: 3.0257, ept: 66.3967
+      Epoch 37 composite train-obj: 2.091401
+            No improvement (2.1711), counter 3/5
+    Epoch [38/50], Train Losses: mse: 10.7078, mae: 2.5303, huber: 2.0894, swd: 2.7070, ept: 70.1347
+    Epoch [38/50], Val Losses: mse: 11.4079, mae: 2.6334, huber: 2.1877, swd: 3.4717, ept: 70.2913
+    Epoch [38/50], Test Losses: mse: 11.9539, mae: 2.6652, huber: 2.2218, swd: 3.1157, ept: 66.1390
+      Epoch 38 composite train-obj: 2.089362
+            No improvement (2.1877), counter 4/5
+    Epoch [39/50], Train Losses: mse: 10.7212, mae: 2.5319, huber: 2.0910, swd: 2.6907, ept: 70.2221
+    Epoch [39/50], Val Losses: mse: 11.4285, mae: 2.6288, huber: 2.1834, swd: 3.3722, ept: 70.6705
+    Epoch [39/50], Test Losses: mse: 12.0808, mae: 2.6834, huber: 2.2385, swd: 3.0684, ept: 66.3626
+      Epoch 39 composite train-obj: 2.091048
+    Epoch [39/50], Test Losses: mse: 11.8421, mae: 2.6628, huber: 2.2175, swd: 3.1715, ept: 66.4683
+    Best round's Test MSE: 11.8421, MAE: 2.6628, SWD: 3.1715
+    Best round's Validation MSE: 10.9852, MAE: 2.5906, SWD: 3.4920
+    Best round's Test verification MSE : 11.8421, MAE: 2.6628, SWD: 3.1715
+    Time taken: 45.46 seconds
+    
+    ==================================================
+    Experiment Summary (DLinear_lorenz96_seq336_pred196_20250512_2140)
+    ==================================================
+    Number of runs: 3
+    Seeds: [1955, 7, 20]
+    
+    Test Performance at Best Validation (mean ± std):
+      mse: 12.0251 ± 0.2449
+      mae: 2.6815 ± 0.0232
+      huber: 2.2357 ± 0.0227
+      swd: 3.4687 ± 0.2573
+      ept: 66.5479 ± 0.2324
+      count: 11.0000 ± 0.0000
+    
+    Corresponding Validation Performance (mean ± std):
+      mse: 11.1632 ± 0.1548
+      mae: 2.6095 ± 0.0155
+      huber: 2.1622 ± 0.0145
+      swd: 3.9250 ± 0.3912
+      ept: 70.0674 ± 0.5390
+      count: 11.0000 ± 0.0000
+    ==================================================
+    Three seeds Time taken: 105.16 seconds
+    
+    Experiment complete: DLinear_lorenz96_seq336_pred196_20250512_2140
+    Model: DLinear
+    Dataset: lorenz96
+    Sequence Length: 336
+    Prediction Length: 196
+    Seeds: [1955, 7, 20]
+    
+
+#### pred=336
+
+##### huber
+
+
+```python
+importlib.reload(monotonic)
+importlib.reload(train_config)
+utils.reload_modules([utils])
+cfg = train_config.FlatDLinearConfig(
+    seq_len=336,
+    pred_len=336,
+    channels=data_mgr.datasets['lorenz96']['channels'],
+    batch_size=128,
+    learning_rate=9e-4,
+    seeds=[1955, 7, 20],
+    epochs=50, 
+)
+exp = execute_model_evaluation('lorenz96', cfg, data_mgr, scale=False)
+```
+
+    Reloading modules...
+      Reloaded: utils
+    Module reload complete.
+    Shape of training data: torch.Size([13300, 6])
+    Shape of validation data: torch.Size([1900, 6])
+    Shape of testing data: torch.Size([3800, 6])
+    global_std.shape: torch.Size([6])
+    Global Std for lorenz96: tensor([3.6750, 3.6678, 3.7240, 3.7347, 3.8038, 3.5588], device='cuda:0')
+    Train set sample shapes: torch.Size([336, 6]), torch.Size([336, 6])
+    Validation set sample shapes: torch.Size([336, 6]), torch.Size([336, 6])
+    Test set data shapes: torch.Size([3800, 6]), torch.Size([3800, 6])
+    Number of batches in train_loader: 99
+    Batch 0: Data shape torch.Size([128, 336, 6]), Target shape torch.Size([128, 336, 6])
+    
+    ==================================================
+    Data Preparation: lorenz96
+    ==================================================
+    Sequence Length: 336
+    Prediction Length: 336
+    Batch Size: 128
+    Scaling: No
+    Train Split: 0.7
+    Val Split: 0.8
+    Training Batches: 99
+    Validation Batches: 10
+    Test Batches: 25
+    ==================================================
+    
+    ==================================================
+     Running experiment with seed 1955 (1/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 14.2220, mae: 3.0295, huber: 2.5647, swd: 4.7813, ept: 41.7827
+    Epoch [1/50], Val Losses: mse: 14.9550, mae: 3.1237, huber: 2.6581, swd: 6.0759, ept: 51.8605
+    Epoch [1/50], Test Losses: mse: 14.8364, mae: 3.0669, huber: 2.6036, swd: 4.6493, ept: 53.8249
+      Epoch 1 composite train-obj: 2.564681
+            Val objective improved inf → 2.6581, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 13.2056, mae: 2.8976, huber: 2.4368, swd: 4.5186, ept: 60.7227
+    Epoch [2/50], Val Losses: mse: 14.7719, mae: 3.0878, huber: 2.6236, swd: 5.8177, ept: 59.7985
+    Epoch [2/50], Test Losses: mse: 14.7225, mae: 3.0522, huber: 2.5897, swd: 4.4206, ept: 57.8138
+      Epoch 2 composite train-obj: 2.436767
+            Val objective improved 2.6581 → 2.6236, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 13.0148, mae: 2.8679, huber: 2.4090, swd: 4.3489, ept: 63.7026
+    Epoch [3/50], Val Losses: mse: 14.4965, mae: 3.0576, huber: 2.5952, swd: 5.4780, ept: 58.0137
+    Epoch [3/50], Test Losses: mse: 14.4379, mae: 3.0125, huber: 2.5520, swd: 4.1360, ept: 60.1927
+      Epoch 3 composite train-obj: 2.409039
+            Val objective improved 2.6236 → 2.5952, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 12.8713, mae: 2.8462, huber: 2.3888, swd: 4.2008, ept: 65.2985
+    Epoch [4/50], Val Losses: mse: 14.1377, mae: 3.0156, huber: 2.5542, swd: 5.4062, ept: 59.8702
+    Epoch [4/50], Test Losses: mse: 14.3458, mae: 3.0023, huber: 2.5423, swd: 4.0967, ept: 61.7541
+      Epoch 4 composite train-obj: 2.388838
+            Val objective improved 2.5952 → 2.5542, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 12.7486, mae: 2.8298, huber: 2.3734, swd: 4.0976, ept: 66.4429
+    Epoch [5/50], Val Losses: mse: 14.0341, mae: 2.9989, huber: 2.5382, swd: 5.3359, ept: 61.8471
+    Epoch [5/50], Test Losses: mse: 14.3335, mae: 2.9966, huber: 2.5379, swd: 4.0460, ept: 62.4799
+      Epoch 5 composite train-obj: 2.373440
+            Val objective improved 2.5542 → 2.5382, saving checkpoint.
+    Epoch [6/50], Train Losses: mse: 12.6388, mae: 2.8147, huber: 2.3591, swd: 4.0097, ept: 66.9986
+    Epoch [6/50], Val Losses: mse: 13.9296, mae: 2.9935, huber: 2.5329, swd: 5.4260, ept: 61.7668
+    Epoch [6/50], Test Losses: mse: 14.0862, mae: 2.9698, huber: 2.5115, swd: 4.1614, ept: 63.3165
+      Epoch 6 composite train-obj: 2.359102
+            Val objective improved 2.5382 → 2.5329, saving checkpoint.
+    Epoch [7/50], Train Losses: mse: 12.5453, mae: 2.8033, huber: 2.3483, swd: 3.9318, ept: 67.7084
+    Epoch [7/50], Val Losses: mse: 13.7742, mae: 2.9666, huber: 2.5073, swd: 5.2116, ept: 61.7369
+    Epoch [7/50], Test Losses: mse: 14.1543, mae: 2.9784, huber: 2.5205, swd: 4.0042, ept: 63.5381
+      Epoch 7 composite train-obj: 2.348251
+            Val objective improved 2.5329 → 2.5073, saving checkpoint.
+    Epoch [8/50], Train Losses: mse: 12.4489, mae: 2.7913, huber: 2.3366, swd: 3.8556, ept: 68.2875
+    Epoch [8/50], Val Losses: mse: 13.6074, mae: 2.9516, huber: 2.4920, swd: 5.0651, ept: 61.6072
+    Epoch [8/50], Test Losses: mse: 13.9432, mae: 2.9499, huber: 2.4923, swd: 3.8584, ept: 63.7164
+      Epoch 8 composite train-obj: 2.336645
+            Val objective improved 2.5073 → 2.4920, saving checkpoint.
+    Epoch [9/50], Train Losses: mse: 12.3853, mae: 2.7829, huber: 2.3286, swd: 3.7764, ept: 68.7010
+    Epoch [9/50], Val Losses: mse: 13.5357, mae: 2.9420, huber: 2.4826, swd: 4.9226, ept: 65.2419
+    Epoch [9/50], Test Losses: mse: 13.7824, mae: 2.9363, huber: 2.4792, swd: 3.7874, ept: 64.2166
+      Epoch 9 composite train-obj: 2.328628
+            Val objective improved 2.4920 → 2.4826, saving checkpoint.
+    Epoch [10/50], Train Losses: mse: 12.3139, mae: 2.7748, huber: 2.3208, swd: 3.7048, ept: 68.9946
+    Epoch [10/50], Val Losses: mse: 13.3558, mae: 2.9281, huber: 2.4688, swd: 4.9357, ept: 64.5091
+    Epoch [10/50], Test Losses: mse: 13.8849, mae: 2.9496, huber: 2.4922, swd: 3.8778, ept: 64.7631
+      Epoch 10 composite train-obj: 2.320828
+            Val objective improved 2.4826 → 2.4688, saving checkpoint.
+    Epoch [11/50], Train Losses: mse: 12.2312, mae: 2.7646, huber: 2.3110, swd: 3.6488, ept: 69.2529
+    Epoch [11/50], Val Losses: mse: 13.1157, mae: 2.8934, huber: 2.4349, swd: 4.8468, ept: 63.7686
+    Epoch [11/50], Test Losses: mse: 13.9951, mae: 2.9602, huber: 2.5028, swd: 3.8121, ept: 63.5580
+      Epoch 11 composite train-obj: 2.311026
+            Val objective improved 2.4688 → 2.4349, saving checkpoint.
+    Epoch [12/50], Train Losses: mse: 12.1869, mae: 2.7584, huber: 2.3050, swd: 3.5735, ept: 69.4474
+    Epoch [12/50], Val Losses: mse: 13.3608, mae: 2.9253, huber: 2.4668, swd: 4.5991, ept: 65.0205
+    Epoch [12/50], Test Losses: mse: 13.8167, mae: 2.9377, huber: 2.4814, swd: 3.5673, ept: 63.1986
+      Epoch 12 composite train-obj: 2.305011
+            No improvement (2.4668), counter 1/5
+    Epoch [13/50], Train Losses: mse: 12.1169, mae: 2.7502, huber: 2.2971, swd: 3.5165, ept: 69.4947
+    Epoch [13/50], Val Losses: mse: 12.9266, mae: 2.8786, huber: 2.4196, swd: 4.6467, ept: 65.6717
+    Epoch [13/50], Test Losses: mse: 13.7648, mae: 2.9364, huber: 2.4793, swd: 3.6437, ept: 65.1899
+      Epoch 13 composite train-obj: 2.297109
+            Val objective improved 2.4349 → 2.4196, saving checkpoint.
+    Epoch [14/50], Train Losses: mse: 12.0743, mae: 2.7442, huber: 2.2914, swd: 3.4615, ept: 70.2138
+    Epoch [14/50], Val Losses: mse: 13.0177, mae: 2.8875, huber: 2.4290, swd: 4.6050, ept: 65.7047
+    Epoch [14/50], Test Losses: mse: 13.7266, mae: 2.9304, huber: 2.4740, swd: 3.5854, ept: 64.2198
+      Epoch 14 composite train-obj: 2.291396
+            No improvement (2.4290), counter 1/5
+    Epoch [15/50], Train Losses: mse: 12.0128, mae: 2.7374, huber: 2.2848, swd: 3.4044, ept: 70.1742
+    Epoch [15/50], Val Losses: mse: 12.9047, mae: 2.8761, huber: 2.4175, swd: 4.5772, ept: 63.0037
+    Epoch [15/50], Test Losses: mse: 13.6883, mae: 2.9245, huber: 2.4680, swd: 3.5925, ept: 64.3436
+      Epoch 15 composite train-obj: 2.284778
+            Val objective improved 2.4196 → 2.4175, saving checkpoint.
+    Epoch [16/50], Train Losses: mse: 11.9693, mae: 2.7322, huber: 2.2798, swd: 3.3667, ept: 70.4140
+    Epoch [16/50], Val Losses: mse: 12.7427, mae: 2.8644, huber: 2.4060, swd: 4.5124, ept: 66.8417
+    Epoch [16/50], Test Losses: mse: 13.4808, mae: 2.9018, huber: 2.4458, swd: 3.5638, ept: 65.7072
+      Epoch 16 composite train-obj: 2.279786
+            Val objective improved 2.4175 → 2.4060, saving checkpoint.
+    Epoch [17/50], Train Losses: mse: 11.9282, mae: 2.7261, huber: 2.2739, swd: 3.3035, ept: 70.8866
+    Epoch [17/50], Val Losses: mse: 12.5667, mae: 2.8437, huber: 2.3861, swd: 4.4670, ept: 65.9029
+    Epoch [17/50], Test Losses: mse: 13.3964, mae: 2.8929, huber: 2.4372, swd: 3.5553, ept: 65.5746
+      Epoch 17 composite train-obj: 2.273850
+            Val objective improved 2.4060 → 2.3861, saving checkpoint.
+    Epoch [18/50], Train Losses: mse: 11.8838, mae: 2.7217, huber: 2.2695, swd: 3.2712, ept: 70.8162
+    Epoch [18/50], Val Losses: mse: 12.7158, mae: 2.8558, huber: 2.3980, swd: 4.3791, ept: 64.3934
+    Epoch [18/50], Test Losses: mse: 13.4848, mae: 2.9031, huber: 2.4475, swd: 3.5211, ept: 65.7128
+      Epoch 18 composite train-obj: 2.269517
+            No improvement (2.3980), counter 1/5
+    Epoch [19/50], Train Losses: mse: 11.8393, mae: 2.7162, huber: 2.2643, swd: 3.2178, ept: 70.8848
+    Epoch [19/50], Val Losses: mse: 12.5814, mae: 2.8454, huber: 2.3878, swd: 4.3849, ept: 65.1034
+    Epoch [19/50], Test Losses: mse: 13.3344, mae: 2.8791, huber: 2.4244, swd: 3.4936, ept: 66.9405
+      Epoch 19 composite train-obj: 2.264269
+            No improvement (2.3878), counter 2/5
+    Epoch [20/50], Train Losses: mse: 11.8065, mae: 2.7117, huber: 2.2599, swd: 3.1926, ept: 70.9702
+    Epoch [20/50], Val Losses: mse: 12.6736, mae: 2.8510, huber: 2.3934, swd: 4.2311, ept: 68.7996
+    Epoch [20/50], Test Losses: mse: 13.3670, mae: 2.8959, huber: 2.4400, swd: 3.3781, ept: 64.2920
+      Epoch 20 composite train-obj: 2.259939
+            No improvement (2.3934), counter 3/5
+    Epoch [21/50], Train Losses: mse: 11.7664, mae: 2.7076, huber: 2.2559, swd: 3.1433, ept: 71.0563
+    Epoch [21/50], Val Losses: mse: 12.3916, mae: 2.8168, huber: 2.3600, swd: 4.1799, ept: 66.8630
+    Epoch [21/50], Test Losses: mse: 13.3543, mae: 2.8892, huber: 2.4340, swd: 3.3566, ept: 65.3379
+      Epoch 21 composite train-obj: 2.255876
+            Val objective improved 2.3861 → 2.3600, saving checkpoint.
+    Epoch [22/50], Train Losses: mse: 11.7522, mae: 2.7053, huber: 2.2537, swd: 3.1018, ept: 71.3247
+    Epoch [22/50], Val Losses: mse: 12.5519, mae: 2.8377, huber: 2.3805, swd: 4.0961, ept: 66.2056
+    Epoch [22/50], Test Losses: mse: 13.2867, mae: 2.8780, huber: 2.4227, swd: 3.2346, ept: 65.2533
+      Epoch 22 composite train-obj: 2.253736
+            No improvement (2.3805), counter 1/5
+    Epoch [23/50], Train Losses: mse: 11.7247, mae: 2.7012, huber: 2.2498, swd: 3.0648, ept: 71.5129
+    Epoch [23/50], Val Losses: mse: 12.4166, mae: 2.8312, huber: 2.3736, swd: 3.9748, ept: 66.0528
+    Epoch [23/50], Test Losses: mse: 13.3002, mae: 2.8787, huber: 2.4239, swd: 3.1704, ept: 64.8856
+      Epoch 23 composite train-obj: 2.249822
+            No improvement (2.3736), counter 2/5
+    Epoch [24/50], Train Losses: mse: 11.6986, mae: 2.6977, huber: 2.2464, swd: 3.0230, ept: 71.5423
+    Epoch [24/50], Val Losses: mse: 12.4099, mae: 2.8181, huber: 2.3617, swd: 4.1318, ept: 65.0175
+    Epoch [24/50], Test Losses: mse: 13.4084, mae: 2.8911, huber: 2.4361, swd: 3.3315, ept: 64.6339
+      Epoch 24 composite train-obj: 2.246366
+            No improvement (2.3617), counter 3/5
+    Epoch [25/50], Train Losses: mse: 11.6712, mae: 2.6954, huber: 2.2441, swd: 2.9984, ept: 71.3177
+    Epoch [25/50], Val Losses: mse: 12.4966, mae: 2.8324, huber: 2.3757, swd: 4.0895, ept: 68.1393
+    Epoch [25/50], Test Losses: mse: 13.3908, mae: 2.8934, huber: 2.4379, swd: 3.3051, ept: 65.3431
+      Epoch 25 composite train-obj: 2.244112
+            No improvement (2.3757), counter 4/5
+    Epoch [26/50], Train Losses: mse: 11.6400, mae: 2.6912, huber: 2.2401, swd: 2.9716, ept: 71.5790
+    Epoch [26/50], Val Losses: mse: 12.3653, mae: 2.8158, huber: 2.3585, swd: 3.9103, ept: 66.7658
+    Epoch [26/50], Test Losses: mse: 13.3686, mae: 2.8920, huber: 2.4361, swd: 3.1533, ept: 64.7027
+      Epoch 26 composite train-obj: 2.240068
+            Val objective improved 2.3600 → 2.3585, saving checkpoint.
+    Epoch [27/50], Train Losses: mse: 11.6184, mae: 2.6880, huber: 2.2370, swd: 2.9435, ept: 71.8656
+    Epoch [27/50], Val Losses: mse: 12.1529, mae: 2.7886, huber: 2.3327, swd: 4.0198, ept: 65.9860
+    Epoch [27/50], Test Losses: mse: 13.2397, mae: 2.8769, huber: 2.4219, swd: 3.3237, ept: 66.3193
+      Epoch 27 composite train-obj: 2.237004
+            Val objective improved 2.3585 → 2.3327, saving checkpoint.
+    Epoch [28/50], Train Losses: mse: 11.5988, mae: 2.6852, huber: 2.2343, swd: 2.9090, ept: 71.7871
+    Epoch [28/50], Val Losses: mse: 12.2379, mae: 2.7940, huber: 2.3386, swd: 4.0077, ept: 66.6337
+    Epoch [28/50], Test Losses: mse: 13.2930, mae: 2.8817, huber: 2.4268, swd: 3.3185, ept: 65.4388
+      Epoch 28 composite train-obj: 2.234332
+            No improvement (2.3386), counter 1/5
+    Epoch [29/50], Train Losses: mse: 11.5904, mae: 2.6841, huber: 2.2333, swd: 2.8868, ept: 71.8353
+    Epoch [29/50], Val Losses: mse: 12.3565, mae: 2.8120, huber: 2.3558, swd: 3.9007, ept: 66.3780
+    Epoch [29/50], Test Losses: mse: 13.4092, mae: 2.8936, huber: 2.4382, swd: 3.1896, ept: 64.7939
+      Epoch 29 composite train-obj: 2.233318
+            No improvement (2.3558), counter 2/5
+    Epoch [30/50], Train Losses: mse: 11.5700, mae: 2.6820, huber: 2.2313, swd: 2.8610, ept: 72.0323
+    Epoch [30/50], Val Losses: mse: 12.3248, mae: 2.8079, huber: 2.3516, swd: 3.9036, ept: 67.9140
+    Epoch [30/50], Test Losses: mse: 13.3395, mae: 2.8923, huber: 2.4367, swd: 3.2491, ept: 64.8242
+      Epoch 30 composite train-obj: 2.231268
+            No improvement (2.3516), counter 3/5
+    Epoch [31/50], Train Losses: mse: 11.5667, mae: 2.6808, huber: 2.2302, swd: 2.8317, ept: 71.8785
+    Epoch [31/50], Val Losses: mse: 12.2091, mae: 2.7948, huber: 2.3387, swd: 3.8513, ept: 67.0665
+    Epoch [31/50], Test Losses: mse: 13.2792, mae: 2.8805, huber: 2.4251, swd: 3.1425, ept: 65.3137
+      Epoch 31 composite train-obj: 2.230157
+            No improvement (2.3387), counter 4/5
+    Epoch [32/50], Train Losses: mse: 11.5424, mae: 2.6774, huber: 2.2269, swd: 2.8097, ept: 72.1414
+    Epoch [32/50], Val Losses: mse: 12.1590, mae: 2.7883, huber: 2.3328, swd: 3.7642, ept: 66.7209
+    Epoch [32/50], Test Losses: mse: 13.4484, mae: 2.8978, huber: 2.4426, swd: 3.1150, ept: 64.9831
+      Epoch 32 composite train-obj: 2.226872
+    Epoch [32/50], Test Losses: mse: 13.2397, mae: 2.8769, huber: 2.4219, swd: 3.3237, ept: 66.3193
+    Best round's Test MSE: 13.2397, MAE: 2.8769, SWD: 3.3237
+    Best round's Validation MSE: 12.1529, MAE: 2.7886, SWD: 4.0198
+    Best round's Test verification MSE : 13.2397, MAE: 2.8769, SWD: 3.3237
+    Time taken: 38.65 seconds
+    
+    ==================================================
+     Running experiment with seed 7 (2/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 14.2223, mae: 3.0306, huber: 2.5657, swd: 4.8769, ept: 41.3416
+    Epoch [1/50], Val Losses: mse: 14.9771, mae: 3.1258, huber: 2.6596, swd: 6.2248, ept: 52.0030
+    Epoch [1/50], Test Losses: mse: 14.8374, mae: 3.0710, huber: 2.6072, swd: 4.7008, ept: 53.4211
+      Epoch 1 composite train-obj: 2.565731
+            Val objective improved inf → 2.6596, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 13.2111, mae: 2.8984, huber: 2.4375, swd: 4.5617, ept: 60.6229
+    Epoch [2/50], Val Losses: mse: 14.8166, mae: 3.0906, huber: 2.6274, swd: 5.9180, ept: 57.7799
+    Epoch [2/50], Test Losses: mse: 14.5557, mae: 3.0305, huber: 2.5689, swd: 4.4256, ept: 58.7233
+      Epoch 2 composite train-obj: 2.437467
+            Val objective improved 2.6596 → 2.6274, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 13.0093, mae: 2.8669, huber: 2.4081, swd: 4.3563, ept: 63.6689
+    Epoch [3/50], Val Losses: mse: 14.5902, mae: 3.0672, huber: 2.6047, swd: 5.8711, ept: 57.4569
+    Epoch [3/50], Test Losses: mse: 14.4984, mae: 3.0203, huber: 2.5599, swd: 4.4244, ept: 59.4158
+      Epoch 3 composite train-obj: 2.408093
+            Val objective improved 2.6274 → 2.6047, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 12.8707, mae: 2.8465, huber: 2.3891, swd: 4.2437, ept: 65.0736
+    Epoch [4/50], Val Losses: mse: 14.3313, mae: 3.0330, huber: 2.5718, swd: 5.5814, ept: 58.6517
+    Epoch [4/50], Test Losses: mse: 14.4066, mae: 3.0032, huber: 2.5436, swd: 4.1663, ept: 60.9669
+      Epoch 4 composite train-obj: 2.389103
+            Val objective improved 2.6047 → 2.5718, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 12.7496, mae: 2.8295, huber: 2.3730, swd: 4.1249, ept: 66.2724
+    Epoch [5/50], Val Losses: mse: 14.0559, mae: 3.0089, huber: 2.5470, swd: 5.5084, ept: 61.1440
+    Epoch [5/50], Test Losses: mse: 14.1679, mae: 2.9799, huber: 2.5211, swd: 4.1482, ept: 62.9153
+      Epoch 5 composite train-obj: 2.373022
+            Val objective improved 2.5718 → 2.5470, saving checkpoint.
+    Epoch [6/50], Train Losses: mse: 12.6482, mae: 2.8155, huber: 2.3598, swd: 4.0212, ept: 67.0736
+    Epoch [6/50], Val Losses: mse: 13.8799, mae: 2.9835, huber: 2.5232, swd: 5.4259, ept: 62.3002
+    Epoch [6/50], Test Losses: mse: 14.2230, mae: 2.9832, huber: 2.5250, swd: 4.1113, ept: 62.0925
+      Epoch 6 composite train-obj: 2.359824
+            Val objective improved 2.5470 → 2.5232, saving checkpoint.
+    Epoch [7/50], Train Losses: mse: 12.5556, mae: 2.8042, huber: 2.3490, swd: 3.9325, ept: 67.7372
+    Epoch [7/50], Val Losses: mse: 13.6962, mae: 2.9638, huber: 2.5036, swd: 5.3300, ept: 62.7729
+    Epoch [7/50], Test Losses: mse: 14.0445, mae: 2.9657, huber: 2.5078, swd: 4.0651, ept: 63.2413
+      Epoch 7 composite train-obj: 2.349013
+            Val objective improved 2.5232 → 2.5036, saving checkpoint.
+    Epoch [8/50], Train Losses: mse: 12.4722, mae: 2.7937, huber: 2.3390, swd: 3.8610, ept: 68.2477
+    Epoch [8/50], Val Losses: mse: 13.5137, mae: 2.9354, huber: 2.4769, swd: 5.1216, ept: 64.2498
+    Epoch [8/50], Test Losses: mse: 14.1339, mae: 2.9697, huber: 2.5123, swd: 3.8959, ept: 64.0068
+      Epoch 8 composite train-obj: 2.339008
+            Val objective improved 2.5036 → 2.4769, saving checkpoint.
+    Epoch [9/50], Train Losses: mse: 12.3743, mae: 2.7817, huber: 2.3274, swd: 3.7808, ept: 68.6900
+    Epoch [9/50], Val Losses: mse: 13.4257, mae: 2.9326, huber: 2.4728, swd: 5.0085, ept: 64.4452
+    Epoch [9/50], Test Losses: mse: 13.9238, mae: 2.9531, huber: 2.4952, swd: 3.7805, ept: 64.0852
+      Epoch 9 composite train-obj: 2.327424
+            Val objective improved 2.4769 → 2.4728, saving checkpoint.
+    Epoch [10/50], Train Losses: mse: 12.3200, mae: 2.7750, huber: 2.3211, swd: 3.7094, ept: 68.8753
+    Epoch [10/50], Val Losses: mse: 13.2303, mae: 2.9051, huber: 2.4467, swd: 4.8966, ept: 66.3853
+    Epoch [10/50], Test Losses: mse: 13.9505, mae: 2.9534, huber: 2.4961, swd: 3.7609, ept: 64.1172
+      Epoch 10 composite train-obj: 2.321091
+            Val objective improved 2.4728 → 2.4467, saving checkpoint.
+    Epoch [11/50], Train Losses: mse: 12.2440, mae: 2.7655, huber: 2.3120, swd: 3.6356, ept: 69.4088
+    Epoch [11/50], Val Losses: mse: 13.2383, mae: 2.9186, huber: 2.4594, swd: 5.0023, ept: 64.7794
+    Epoch [11/50], Test Losses: mse: 13.5475, mae: 2.9086, huber: 2.4523, swd: 3.8308, ept: 64.4503
+      Epoch 11 composite train-obj: 2.311978
+            No improvement (2.4594), counter 1/5
+    Epoch [12/50], Train Losses: mse: 12.1796, mae: 2.7578, huber: 2.3045, swd: 3.5851, ept: 69.5227
+    Epoch [12/50], Val Losses: mse: 13.0852, mae: 2.8982, huber: 2.4391, swd: 4.6824, ept: 64.5305
+    Epoch [12/50], Test Losses: mse: 13.7028, mae: 2.9233, huber: 2.4671, swd: 3.5674, ept: 65.0498
+      Epoch 12 composite train-obj: 2.304530
+            Val objective improved 2.4467 → 2.4391, saving checkpoint.
+    Epoch [13/50], Train Losses: mse: 12.1250, mae: 2.7509, huber: 2.2979, swd: 3.5160, ept: 69.7831
+    Epoch [13/50], Val Losses: mse: 13.0317, mae: 2.8923, huber: 2.4336, swd: 4.6535, ept: 64.0868
+    Epoch [13/50], Test Losses: mse: 13.6197, mae: 2.9122, huber: 2.4563, swd: 3.5495, ept: 64.9870
+      Epoch 13 composite train-obj: 2.297855
+            Val objective improved 2.4391 → 2.4336, saving checkpoint.
+    Epoch [14/50], Train Losses: mse: 12.0725, mae: 2.7441, huber: 2.2913, swd: 3.4485, ept: 69.9912
+    Epoch [14/50], Val Losses: mse: 12.9396, mae: 2.8786, huber: 2.4211, swd: 4.7138, ept: 64.9392
+    Epoch [14/50], Test Losses: mse: 13.5421, mae: 2.9039, huber: 2.4483, swd: 3.6306, ept: 64.3640
+      Epoch 14 composite train-obj: 2.291305
+            Val objective improved 2.4336 → 2.4211, saving checkpoint.
+    Epoch [15/50], Train Losses: mse: 12.0141, mae: 2.7378, huber: 2.2852, swd: 3.4006, ept: 70.1139
+    Epoch [15/50], Val Losses: mse: 13.0194, mae: 2.8889, huber: 2.4311, swd: 4.6497, ept: 63.7637
+    Epoch [15/50], Test Losses: mse: 13.7245, mae: 2.9279, huber: 2.4717, swd: 3.6244, ept: 65.1134
+      Epoch 15 composite train-obj: 2.285151
+            No improvement (2.4311), counter 1/5
+    Epoch [16/50], Train Losses: mse: 11.9628, mae: 2.7310, huber: 2.2786, swd: 3.3558, ept: 70.3894
+    Epoch [16/50], Val Losses: mse: 13.0994, mae: 2.8935, huber: 2.4369, swd: 4.3474, ept: 62.4023
+    Epoch [16/50], Test Losses: mse: 13.7397, mae: 2.9259, huber: 2.4697, swd: 3.3638, ept: 64.0439
+      Epoch 16 composite train-obj: 2.278621
+            No improvement (2.4369), counter 2/5
+    Epoch [17/50], Train Losses: mse: 11.9253, mae: 2.7270, huber: 2.2747, swd: 3.2957, ept: 70.4927
+    Epoch [17/50], Val Losses: mse: 12.7009, mae: 2.8580, huber: 2.3997, swd: 4.5401, ept: 64.1763
+    Epoch [17/50], Test Losses: mse: 13.5428, mae: 2.9117, huber: 2.4555, swd: 3.5500, ept: 64.9575
+      Epoch 17 composite train-obj: 2.274684
+            Val objective improved 2.4211 → 2.3997, saving checkpoint.
+    Epoch [18/50], Train Losses: mse: 11.8904, mae: 2.7228, huber: 2.2707, swd: 3.2563, ept: 70.5283
+    Epoch [18/50], Val Losses: mse: 12.6876, mae: 2.8512, huber: 2.3931, swd: 4.3737, ept: 64.6504
+    Epoch [18/50], Test Losses: mse: 13.6725, mae: 2.9184, huber: 2.4625, swd: 3.3881, ept: 65.3201
+      Epoch 18 composite train-obj: 2.270691
+            Val objective improved 2.3997 → 2.3931, saving checkpoint.
+    Epoch [19/50], Train Losses: mse: 11.8424, mae: 2.7166, huber: 2.2647, swd: 3.2066, ept: 70.9261
+    Epoch [19/50], Val Losses: mse: 12.4611, mae: 2.8231, huber: 2.3663, swd: 4.3777, ept: 65.3666
+    Epoch [19/50], Test Losses: mse: 13.4495, mae: 2.8967, huber: 2.4411, swd: 3.4841, ept: 64.9903
+      Epoch 19 composite train-obj: 2.264657
+            Val objective improved 2.3931 → 2.3663, saving checkpoint.
+    Epoch [20/50], Train Losses: mse: 11.8167, mae: 2.7128, huber: 2.2610, swd: 3.1683, ept: 70.9490
+    Epoch [20/50], Val Losses: mse: 12.5547, mae: 2.8393, huber: 2.3824, swd: 4.1793, ept: 65.2708
+    Epoch [20/50], Test Losses: mse: 13.4971, mae: 2.9011, huber: 2.4456, swd: 3.2671, ept: 64.5804
+      Epoch 20 composite train-obj: 2.260995
+            No improvement (2.3824), counter 1/5
+    Epoch [21/50], Train Losses: mse: 11.7763, mae: 2.7082, huber: 2.2565, swd: 3.1142, ept: 71.2174
+    Epoch [21/50], Val Losses: mse: 12.6324, mae: 2.8453, huber: 2.3881, swd: 4.1787, ept: 64.9754
+    Epoch [21/50], Test Losses: mse: 13.3939, mae: 2.8894, huber: 2.4341, swd: 3.2711, ept: 65.3767
+      Epoch 21 composite train-obj: 2.256516
+            No improvement (2.3881), counter 2/5
+    Epoch [22/50], Train Losses: mse: 11.7516, mae: 2.7049, huber: 2.2533, swd: 3.0741, ept: 71.3477
+    Epoch [22/50], Val Losses: mse: 12.5139, mae: 2.8271, huber: 2.3705, swd: 4.2559, ept: 67.1673
+    Epoch [22/50], Test Losses: mse: 13.3563, mae: 2.8917, huber: 2.4362, swd: 3.4068, ept: 65.4183
+      Epoch 22 composite train-obj: 2.253323
+            No improvement (2.3705), counter 3/5
+    Epoch [23/50], Train Losses: mse: 11.7103, mae: 2.7003, huber: 2.2489, swd: 3.0536, ept: 71.2374
+    Epoch [23/50], Val Losses: mse: 12.2668, mae: 2.8149, huber: 2.3570, swd: 4.1126, ept: 65.8813
+    Epoch [23/50], Test Losses: mse: 13.2619, mae: 2.8778, huber: 2.4228, swd: 3.2573, ept: 64.9011
+      Epoch 23 composite train-obj: 2.248902
+            Val objective improved 2.3663 → 2.3570, saving checkpoint.
+    Epoch [24/50], Train Losses: mse: 11.7018, mae: 2.6986, huber: 2.2472, swd: 3.0030, ept: 71.4827
+    Epoch [24/50], Val Losses: mse: 12.4702, mae: 2.8267, huber: 2.3701, swd: 4.1964, ept: 65.3891
+    Epoch [24/50], Test Losses: mse: 13.3319, mae: 2.8856, huber: 2.4305, swd: 3.3442, ept: 65.5105
+      Epoch 24 composite train-obj: 2.247236
+            No improvement (2.3701), counter 1/5
+    Epoch [25/50], Train Losses: mse: 11.6640, mae: 2.6941, huber: 2.2429, swd: 2.9791, ept: 71.5222
+    Epoch [25/50], Val Losses: mse: 12.0361, mae: 2.7748, huber: 2.3186, swd: 4.0213, ept: 68.3129
+    Epoch [25/50], Test Losses: mse: 13.3882, mae: 2.8950, huber: 2.4394, swd: 3.2092, ept: 64.8556
+      Epoch 25 composite train-obj: 2.242913
+            Val objective improved 2.3570 → 2.3186, saving checkpoint.
+    Epoch [26/50], Train Losses: mse: 11.6393, mae: 2.6910, huber: 2.2400, swd: 2.9469, ept: 71.7624
+    Epoch [26/50], Val Losses: mse: 12.4164, mae: 2.8243, huber: 2.3670, swd: 3.9675, ept: 64.6457
+    Epoch [26/50], Test Losses: mse: 13.2197, mae: 2.8709, huber: 2.4159, swd: 3.2044, ept: 65.5631
+      Epoch 26 composite train-obj: 2.239986
+            No improvement (2.3670), counter 1/5
+    Epoch [27/50], Train Losses: mse: 11.6186, mae: 2.6881, huber: 2.2371, swd: 2.9183, ept: 71.7888
+    Epoch [27/50], Val Losses: mse: 12.2881, mae: 2.8085, huber: 2.3513, swd: 4.0524, ept: 67.7089
+    Epoch [27/50], Test Losses: mse: 13.3045, mae: 2.8816, huber: 2.4267, swd: 3.2460, ept: 65.0680
+      Epoch 27 composite train-obj: 2.237069
+            No improvement (2.3513), counter 2/5
+    Epoch [28/50], Train Losses: mse: 11.6068, mae: 2.6862, huber: 2.2353, swd: 2.8850, ept: 71.9331
+    Epoch [28/50], Val Losses: mse: 12.2042, mae: 2.7994, huber: 2.3424, swd: 3.9550, ept: 64.8197
+    Epoch [28/50], Test Losses: mse: 13.2849, mae: 2.8786, huber: 2.4238, swd: 3.1835, ept: 64.8906
+      Epoch 28 composite train-obj: 2.235274
+            No improvement (2.3424), counter 3/5
+    Epoch [29/50], Train Losses: mse: 11.5887, mae: 2.6838, huber: 2.2330, swd: 2.8537, ept: 71.7192
+    Epoch [29/50], Val Losses: mse: 12.0688, mae: 2.7846, huber: 2.3276, swd: 4.0350, ept: 67.6802
+    Epoch [29/50], Test Losses: mse: 13.2375, mae: 2.8786, huber: 2.4233, swd: 3.2690, ept: 65.9523
+      Epoch 29 composite train-obj: 2.232962
+            No improvement (2.3276), counter 4/5
+    Epoch [30/50], Train Losses: mse: 11.5723, mae: 2.6820, huber: 2.2312, swd: 2.8309, ept: 71.8884
+    Epoch [30/50], Val Losses: mse: 12.4797, mae: 2.8252, huber: 2.3687, swd: 4.0204, ept: 66.2311
+    Epoch [30/50], Test Losses: mse: 13.2811, mae: 2.8782, huber: 2.4237, swd: 3.2804, ept: 64.1162
+      Epoch 30 composite train-obj: 2.231202
+    Epoch [30/50], Test Losses: mse: 13.3882, mae: 2.8950, huber: 2.4394, swd: 3.2092, ept: 64.8556
+    Best round's Test MSE: 13.3882, MAE: 2.8950, SWD: 3.2092
+    Best round's Validation MSE: 12.0361, MAE: 2.7748, SWD: 4.0213
+    Best round's Test verification MSE : 13.3882, MAE: 2.8950, SWD: 3.2092
+    Time taken: 36.52 seconds
+    
+    ==================================================
+     Running experiment with seed 20 (3/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 14.2610, mae: 3.0344, huber: 2.5694, swd: 4.7059, ept: 41.0186
+    Epoch [1/50], Val Losses: mse: 14.9715, mae: 3.1215, huber: 2.6558, swd: 5.9576, ept: 51.4682
+    Epoch [1/50], Test Losses: mse: 14.8949, mae: 3.0756, huber: 2.6117, swd: 4.5231, ept: 53.7239
+      Epoch 1 composite train-obj: 2.569422
+            Val objective improved inf → 2.6558, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 13.2281, mae: 2.9008, huber: 2.4398, swd: 4.4150, ept: 60.4341
+    Epoch [2/50], Val Losses: mse: 14.6756, mae: 3.0782, huber: 2.6147, swd: 5.7716, ept: 56.7073
+    Epoch [2/50], Test Losses: mse: 14.4033, mae: 3.0202, huber: 2.5583, swd: 4.4329, ept: 57.7765
+      Epoch 2 composite train-obj: 2.439832
+            Val objective improved 2.6558 → 2.6147, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 13.0006, mae: 2.8662, huber: 2.4074, swd: 4.2574, ept: 63.7431
+    Epoch [3/50], Val Losses: mse: 14.2614, mae: 3.0352, huber: 2.5728, swd: 5.4831, ept: 60.1033
+    Epoch [3/50], Test Losses: mse: 14.6025, mae: 3.0302, huber: 2.5695, swd: 4.1704, ept: 61.4462
+      Epoch 3 composite train-obj: 2.407414
+            Val objective improved 2.6147 → 2.5728, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 12.8611, mae: 2.8454, huber: 2.3880, swd: 4.1261, ept: 65.3855
+    Epoch [4/50], Val Losses: mse: 14.3344, mae: 3.0353, huber: 2.5741, swd: 5.2632, ept: 60.5777
+    Epoch [4/50], Test Losses: mse: 14.3228, mae: 3.0003, huber: 2.5409, swd: 4.0094, ept: 61.6998
+      Epoch 4 composite train-obj: 2.387964
+            No improvement (2.5741), counter 1/5
+    Epoch [5/50], Train Losses: mse: 12.7611, mae: 2.8311, huber: 2.3746, swd: 4.0162, ept: 66.0741
+    Epoch [5/50], Val Losses: mse: 14.0018, mae: 2.9961, huber: 2.5357, swd: 5.2174, ept: 61.0313
+    Epoch [5/50], Test Losses: mse: 14.1902, mae: 2.9817, huber: 2.5229, swd: 3.9298, ept: 62.1063
+      Epoch 5 composite train-obj: 2.374641
+            Val objective improved 2.5728 → 2.5357, saving checkpoint.
+    Epoch [6/50], Train Losses: mse: 12.6508, mae: 2.8169, huber: 2.3610, swd: 3.9423, ept: 66.9260
+    Epoch [6/50], Val Losses: mse: 13.7461, mae: 2.9628, huber: 2.5032, swd: 5.0244, ept: 61.9776
+    Epoch [6/50], Test Losses: mse: 14.1222, mae: 2.9762, huber: 2.5177, swd: 3.8561, ept: 63.1238
+      Epoch 6 composite train-obj: 2.361041
+            Val objective improved 2.5357 → 2.5032, saving checkpoint.
+    Epoch [7/50], Train Losses: mse: 12.5646, mae: 2.8050, huber: 2.3499, swd: 3.8453, ept: 67.7353
+    Epoch [7/50], Val Losses: mse: 13.7035, mae: 2.9551, huber: 2.4955, swd: 4.9898, ept: 62.3101
+    Epoch [7/50], Test Losses: mse: 14.3029, mae: 2.9950, huber: 2.5363, swd: 3.8465, ept: 63.4122
+      Epoch 7 composite train-obj: 2.349875
+            Val objective improved 2.5032 → 2.4955, saving checkpoint.
+    Epoch [8/50], Train Losses: mse: 12.4681, mae: 2.7937, huber: 2.3390, swd: 3.8046, ept: 67.8922
+    Epoch [8/50], Val Losses: mse: 13.7248, mae: 2.9673, huber: 2.5078, swd: 4.8315, ept: 61.9545
+    Epoch [8/50], Test Losses: mse: 14.0418, mae: 2.9599, huber: 2.5030, swd: 3.6754, ept: 63.9458
+      Epoch 8 composite train-obj: 2.338989
+            No improvement (2.5078), counter 1/5
+    Epoch [9/50], Train Losses: mse: 12.3741, mae: 2.7814, huber: 2.3272, swd: 3.7186, ept: 68.6477
+    Epoch [9/50], Val Losses: mse: 13.4830, mae: 2.9378, huber: 2.4791, swd: 4.8835, ept: 64.0458
+    Epoch [9/50], Test Losses: mse: 13.8732, mae: 2.9439, huber: 2.4867, swd: 3.7583, ept: 63.2427
+      Epoch 9 composite train-obj: 2.327225
+            Val objective improved 2.4955 → 2.4791, saving checkpoint.
+    Epoch [10/50], Train Losses: mse: 12.3069, mae: 2.7736, huber: 2.3197, swd: 3.6609, ept: 68.8055
+    Epoch [10/50], Val Losses: mse: 13.2178, mae: 2.9085, huber: 2.4491, swd: 4.7941, ept: 65.1658
+    Epoch [10/50], Test Losses: mse: 13.7811, mae: 2.9425, huber: 2.4848, swd: 3.7251, ept: 64.8895
+      Epoch 10 composite train-obj: 2.319683
+            Val objective improved 2.4791 → 2.4491, saving checkpoint.
+    Epoch [11/50], Train Losses: mse: 12.2460, mae: 2.7656, huber: 2.3120, swd: 3.6116, ept: 69.1810
+    Epoch [11/50], Val Losses: mse: 13.2043, mae: 2.9102, huber: 2.4505, swd: 4.6036, ept: 64.7384
+    Epoch [11/50], Test Losses: mse: 13.8637, mae: 2.9451, huber: 2.4882, swd: 3.5561, ept: 64.9470
+      Epoch 11 composite train-obj: 2.312045
+            No improvement (2.4505), counter 1/5
+    Epoch [12/50], Train Losses: mse: 12.1731, mae: 2.7569, huber: 2.3036, swd: 3.5549, ept: 69.5348
+    Epoch [12/50], Val Losses: mse: 13.2817, mae: 2.9187, huber: 2.4599, swd: 4.5302, ept: 64.1125
+    Epoch [12/50], Test Losses: mse: 13.6492, mae: 2.9220, huber: 2.4652, swd: 3.4921, ept: 63.6415
+      Epoch 12 composite train-obj: 2.303631
+            No improvement (2.4599), counter 2/5
+    Epoch [13/50], Train Losses: mse: 12.1204, mae: 2.7505, huber: 2.2974, swd: 3.4894, ept: 69.6761
+    Epoch [13/50], Val Losses: mse: 13.0952, mae: 2.9002, huber: 2.4416, swd: 4.5695, ept: 64.1072
+    Epoch [13/50], Test Losses: mse: 13.6979, mae: 2.9269, huber: 2.4708, swd: 3.5954, ept: 64.1239
+      Epoch 13 composite train-obj: 2.297398
+            Val objective improved 2.4491 → 2.4416, saving checkpoint.
+    Epoch [14/50], Train Losses: mse: 12.0755, mae: 2.7452, huber: 2.2923, swd: 3.4380, ept: 69.9074
+    Epoch [14/50], Val Losses: mse: 12.9204, mae: 2.8777, huber: 2.4193, swd: 4.6639, ept: 67.2365
+    Epoch [14/50], Test Losses: mse: 13.6477, mae: 2.9228, huber: 2.4665, swd: 3.6691, ept: 64.3489
+      Epoch 14 composite train-obj: 2.292318
+            Val objective improved 2.4416 → 2.4193, saving checkpoint.
+    Epoch [15/50], Train Losses: mse: 12.0059, mae: 2.7372, huber: 2.2845, swd: 3.3998, ept: 70.2718
+    Epoch [15/50], Val Losses: mse: 12.9757, mae: 2.8851, huber: 2.4262, swd: 4.4778, ept: 64.0558
+    Epoch [15/50], Test Losses: mse: 13.6426, mae: 2.9221, huber: 2.4655, swd: 3.5587, ept: 65.0114
+      Epoch 15 composite train-obj: 2.284490
+            No improvement (2.4262), counter 1/5
+    Epoch [16/50], Train Losses: mse: 11.9630, mae: 2.7313, huber: 2.2788, swd: 3.3558, ept: 70.3413
+    Epoch [16/50], Val Losses: mse: 12.8709, mae: 2.8696, huber: 2.4120, swd: 4.3623, ept: 67.1228
+    Epoch [16/50], Test Losses: mse: 13.4746, mae: 2.9012, huber: 2.4454, swd: 3.4259, ept: 65.1972
+      Epoch 16 composite train-obj: 2.278832
+            Val objective improved 2.4193 → 2.4120, saving checkpoint.
+    Epoch [17/50], Train Losses: mse: 11.9226, mae: 2.7266, huber: 2.2743, swd: 3.3000, ept: 70.6399
+    Epoch [17/50], Val Losses: mse: 12.7290, mae: 2.8540, huber: 2.3965, swd: 4.3155, ept: 64.6340
+    Epoch [17/50], Test Losses: mse: 13.5748, mae: 2.9118, huber: 2.4559, swd: 3.4284, ept: 64.5215
+      Epoch 17 composite train-obj: 2.274305
+            Val objective improved 2.4120 → 2.3965, saving checkpoint.
+    Epoch [18/50], Train Losses: mse: 11.8805, mae: 2.7218, huber: 2.2697, swd: 3.2736, ept: 70.5081
+    Epoch [18/50], Val Losses: mse: 12.6686, mae: 2.8512, huber: 2.3931, swd: 4.2589, ept: 65.1367
+    Epoch [18/50], Test Losses: mse: 13.4844, mae: 2.9047, huber: 2.4486, swd: 3.3943, ept: 65.2832
+      Epoch 18 composite train-obj: 2.269688
+            Val objective improved 2.3965 → 2.3931, saving checkpoint.
+    Epoch [19/50], Train Losses: mse: 11.8420, mae: 2.7168, huber: 2.2647, swd: 3.2324, ept: 70.8166
+    Epoch [19/50], Val Losses: mse: 12.6269, mae: 2.8419, huber: 2.3845, swd: 4.2145, ept: 65.8849
+    Epoch [19/50], Test Losses: mse: 13.3302, mae: 2.8851, huber: 2.4299, swd: 3.3890, ept: 65.5362
+      Epoch 19 composite train-obj: 2.264735
+            Val objective improved 2.3931 → 2.3845, saving checkpoint.
+    Epoch [20/50], Train Losses: mse: 11.8041, mae: 2.7116, huber: 2.2599, swd: 3.1854, ept: 70.9370
+    Epoch [20/50], Val Losses: mse: 12.4802, mae: 2.8323, huber: 2.3745, swd: 4.2552, ept: 65.3572
+    Epoch [20/50], Test Losses: mse: 13.5945, mae: 2.9083, huber: 2.4531, swd: 3.3935, ept: 64.6657
+      Epoch 20 composite train-obj: 2.259854
+            Val objective improved 2.3845 → 2.3745, saving checkpoint.
+    Epoch [21/50], Train Losses: mse: 11.7753, mae: 2.7078, huber: 2.2562, swd: 3.1501, ept: 71.1772
+    Epoch [21/50], Val Losses: mse: 12.6062, mae: 2.8437, huber: 2.3865, swd: 4.1080, ept: 65.5214
+    Epoch [21/50], Test Losses: mse: 13.2661, mae: 2.8776, huber: 2.4221, swd: 3.2979, ept: 65.3207
+      Epoch 21 composite train-obj: 2.256156
+            No improvement (2.3865), counter 1/5
+    Epoch [22/50], Train Losses: mse: 11.7524, mae: 2.7055, huber: 2.2539, swd: 3.1211, ept: 71.1176
+    Epoch [22/50], Val Losses: mse: 12.3319, mae: 2.8105, huber: 2.3535, swd: 4.0952, ept: 67.2155
+    Epoch [22/50], Test Losses: mse: 13.4066, mae: 2.8936, huber: 2.4382, swd: 3.2888, ept: 65.8021
+      Epoch 22 composite train-obj: 2.253885
+            Val objective improved 2.3745 → 2.3535, saving checkpoint.
+    Epoch [23/50], Train Losses: mse: 11.7239, mae: 2.7020, huber: 2.2505, swd: 3.0777, ept: 71.2535
+    Epoch [23/50], Val Losses: mse: 12.2958, mae: 2.8117, huber: 2.3548, swd: 3.9742, ept: 64.3008
+    Epoch [23/50], Test Losses: mse: 13.4697, mae: 2.8951, huber: 2.4401, swd: 3.1834, ept: 65.1486
+      Epoch 23 composite train-obj: 2.250517
+            No improvement (2.3548), counter 1/5
+    Epoch [24/50], Train Losses: mse: 11.6836, mae: 2.6967, huber: 2.2454, swd: 3.0631, ept: 71.3188
+    Epoch [24/50], Val Losses: mse: 12.3662, mae: 2.8166, huber: 2.3595, swd: 3.8025, ept: 65.7613
+    Epoch [24/50], Test Losses: mse: 13.3278, mae: 2.8798, huber: 2.4247, swd: 3.0677, ept: 66.0921
+      Epoch 24 composite train-obj: 2.245431
+            No improvement (2.3595), counter 2/5
+    Epoch [25/50], Train Losses: mse: 11.6764, mae: 2.6954, huber: 2.2441, swd: 3.0187, ept: 71.5165
+    Epoch [25/50], Val Losses: mse: 12.3941, mae: 2.8231, huber: 2.3658, swd: 3.9491, ept: 65.9675
+    Epoch [25/50], Test Losses: mse: 13.2047, mae: 2.8713, huber: 2.4167, swd: 3.1996, ept: 64.3806
+      Epoch 25 composite train-obj: 2.244146
+            No improvement (2.3658), counter 3/5
+    Epoch [26/50], Train Losses: mse: 11.6442, mae: 2.6913, huber: 2.2403, swd: 2.9960, ept: 71.5752
+    Epoch [26/50], Val Losses: mse: 12.1857, mae: 2.7950, huber: 2.3379, swd: 3.8664, ept: 66.5716
+    Epoch [26/50], Test Losses: mse: 13.3247, mae: 2.8837, huber: 2.4287, swd: 3.1672, ept: 66.1548
+      Epoch 26 composite train-obj: 2.240303
+            Val objective improved 2.3535 → 2.3379, saving checkpoint.
+    Epoch [27/50], Train Losses: mse: 11.6181, mae: 2.6880, huber: 2.2370, swd: 2.9685, ept: 71.6768
+    Epoch [27/50], Val Losses: mse: 12.1836, mae: 2.7910, huber: 2.3347, swd: 4.0663, ept: 66.8035
+    Epoch [27/50], Test Losses: mse: 13.3111, mae: 2.8876, huber: 2.4322, swd: 3.3925, ept: 64.2906
+      Epoch 27 composite train-obj: 2.237012
+            Val objective improved 2.3379 → 2.3347, saving checkpoint.
+    Epoch [28/50], Train Losses: mse: 11.5980, mae: 2.6860, huber: 2.2351, swd: 2.9467, ept: 71.7753
+    Epoch [28/50], Val Losses: mse: 12.2246, mae: 2.7969, huber: 2.3407, swd: 3.8274, ept: 67.6691
+    Epoch [28/50], Test Losses: mse: 13.2196, mae: 2.8715, huber: 2.4171, swd: 3.1426, ept: 65.0936
+      Epoch 28 composite train-obj: 2.235109
+            No improvement (2.3407), counter 1/5
+    Epoch [29/50], Train Losses: mse: 11.5843, mae: 2.6835, huber: 2.2327, swd: 2.9264, ept: 71.8584
+    Epoch [29/50], Val Losses: mse: 12.3825, mae: 2.8218, huber: 2.3652, swd: 3.8816, ept: 65.3837
+    Epoch [29/50], Test Losses: mse: 13.2015, mae: 2.8686, huber: 2.4140, swd: 3.1595, ept: 64.9847
+      Epoch 29 composite train-obj: 2.232717
+            No improvement (2.3652), counter 2/5
+    Epoch [30/50], Train Losses: mse: 11.5687, mae: 2.6804, huber: 2.2298, swd: 2.8833, ept: 72.0075
+    Epoch [30/50], Val Losses: mse: 12.1912, mae: 2.7917, huber: 2.3359, swd: 3.7586, ept: 65.8667
+    Epoch [30/50], Test Losses: mse: 13.2513, mae: 2.8769, huber: 2.4217, swd: 3.1190, ept: 65.5152
+      Epoch 30 composite train-obj: 2.229818
+            No improvement (2.3359), counter 3/5
+    Epoch [31/50], Train Losses: mse: 11.5539, mae: 2.6794, huber: 2.2287, swd: 2.8791, ept: 71.9789
+    Epoch [31/50], Val Losses: mse: 12.1160, mae: 2.7875, huber: 2.3311, swd: 3.8251, ept: 67.0762
+    Epoch [31/50], Test Losses: mse: 13.2542, mae: 2.8749, huber: 2.4200, swd: 3.1652, ept: 65.1694
+      Epoch 31 composite train-obj: 2.228714
+            Val objective improved 2.3347 → 2.3311, saving checkpoint.
+    Epoch [32/50], Train Losses: mse: 11.5417, mae: 2.6777, huber: 2.2271, swd: 2.8504, ept: 72.0051
+    Epoch [32/50], Val Losses: mse: 12.1464, mae: 2.7926, huber: 2.3365, swd: 3.6951, ept: 67.2477
+    Epoch [32/50], Test Losses: mse: 13.1913, mae: 2.8713, huber: 2.4162, swd: 3.0506, ept: 65.9468
+      Epoch 32 composite train-obj: 2.227121
+            No improvement (2.3365), counter 1/5
+    Epoch [33/50], Train Losses: mse: 11.5366, mae: 2.6765, huber: 2.2260, swd: 2.8295, ept: 72.1281
+    Epoch [33/50], Val Losses: mse: 12.1453, mae: 2.7979, huber: 2.3413, swd: 3.7222, ept: 66.6099
+    Epoch [33/50], Test Losses: mse: 13.0501, mae: 2.8506, huber: 2.3964, swd: 3.0539, ept: 66.2069
+      Epoch 33 composite train-obj: 2.226017
+            No improvement (2.3413), counter 2/5
+    Epoch [34/50], Train Losses: mse: 11.5185, mae: 2.6747, huber: 2.2242, swd: 2.8209, ept: 72.0560
+    Epoch [34/50], Val Losses: mse: 12.1515, mae: 2.7883, huber: 2.3324, swd: 3.5951, ept: 65.9517
+    Epoch [34/50], Test Losses: mse: 13.3224, mae: 2.8815, huber: 2.4270, swd: 3.0113, ept: 65.5511
+      Epoch 34 composite train-obj: 2.224228
+            No improvement (2.3324), counter 3/5
+    Epoch [35/50], Train Losses: mse: 11.4989, mae: 2.6717, huber: 2.2214, swd: 2.7965, ept: 72.3197
+    Epoch [35/50], Val Losses: mse: 12.1000, mae: 2.7827, huber: 2.3270, swd: 3.7045, ept: 67.4849
+    Epoch [35/50], Test Losses: mse: 13.1675, mae: 2.8652, huber: 2.4105, swd: 3.0923, ept: 65.9855
+      Epoch 35 composite train-obj: 2.221360
+            Val objective improved 2.3311 → 2.3270, saving checkpoint.
+    Epoch [36/50], Train Losses: mse: 11.4923, mae: 2.6707, huber: 2.2204, swd: 2.7850, ept: 72.2568
+    Epoch [36/50], Val Losses: mse: 12.0461, mae: 2.7820, huber: 2.3255, swd: 3.5866, ept: 66.8934
+    Epoch [36/50], Test Losses: mse: 13.1300, mae: 2.8612, huber: 2.4066, swd: 2.9830, ept: 66.6419
+      Epoch 36 composite train-obj: 2.220367
+            Val objective improved 2.3270 → 2.3255, saving checkpoint.
+    Epoch [37/50], Train Losses: mse: 11.4879, mae: 2.6695, huber: 2.2193, swd: 2.7610, ept: 71.9840
+    Epoch [37/50], Val Losses: mse: 12.2708, mae: 2.8020, huber: 2.3457, swd: 3.6063, ept: 67.1881
+    Epoch [37/50], Test Losses: mse: 13.1546, mae: 2.8613, huber: 2.4069, swd: 3.0653, ept: 65.0925
+      Epoch 37 composite train-obj: 2.219286
+            No improvement (2.3457), counter 1/5
+    Epoch [38/50], Train Losses: mse: 11.4682, mae: 2.6670, huber: 2.2168, swd: 2.7512, ept: 72.6153
+    Epoch [38/50], Val Losses: mse: 11.9013, mae: 2.7590, huber: 2.3036, swd: 3.6427, ept: 66.1116
+    Epoch [38/50], Test Losses: mse: 13.2161, mae: 2.8696, huber: 2.4153, swd: 3.0828, ept: 65.4995
+      Epoch 38 composite train-obj: 2.216834
+            Val objective improved 2.3255 → 2.3036, saving checkpoint.
+    Epoch [39/50], Train Losses: mse: 11.4642, mae: 2.6667, huber: 2.2166, swd: 2.7460, ept: 72.1936
+    Epoch [39/50], Val Losses: mse: 11.9717, mae: 2.7723, huber: 2.3167, swd: 3.5564, ept: 66.6805
+    Epoch [39/50], Test Losses: mse: 13.2207, mae: 2.8717, huber: 2.4170, swd: 2.9900, ept: 64.7419
+      Epoch 39 composite train-obj: 2.216591
+            No improvement (2.3167), counter 1/5
+    Epoch [40/50], Train Losses: mse: 11.4645, mae: 2.6660, huber: 2.2160, swd: 2.7133, ept: 72.3170
+    Epoch [40/50], Val Losses: mse: 12.1340, mae: 2.7887, huber: 2.3336, swd: 3.5963, ept: 67.3449
+    Epoch [40/50], Test Losses: mse: 13.1853, mae: 2.8673, huber: 2.4127, swd: 3.0625, ept: 65.1643
+      Epoch 40 composite train-obj: 2.215977
+            No improvement (2.3336), counter 2/5
+    Epoch [41/50], Train Losses: mse: 11.4593, mae: 2.6656, huber: 2.2156, swd: 2.7043, ept: 72.5174
+    Epoch [41/50], Val Losses: mse: 12.2457, mae: 2.7970, huber: 2.3421, swd: 3.5584, ept: 66.0287
+    Epoch [41/50], Test Losses: mse: 13.3371, mae: 2.8792, huber: 2.4255, swd: 2.9869, ept: 65.0213
+      Epoch 41 composite train-obj: 2.215564
+            No improvement (2.3421), counter 3/5
+    Epoch [42/50], Train Losses: mse: 11.4494, mae: 2.6638, huber: 2.2138, swd: 2.6928, ept: 72.4313
+    Epoch [42/50], Val Losses: mse: 12.0849, mae: 2.7842, huber: 2.3282, swd: 3.4451, ept: 67.9194
+    Epoch [42/50], Test Losses: mse: 13.1689, mae: 2.8630, huber: 2.4085, swd: 2.9094, ept: 65.9008
+      Epoch 42 composite train-obj: 2.213846
+            No improvement (2.3282), counter 4/5
+    Epoch [43/50], Train Losses: mse: 11.4529, mae: 2.6638, huber: 2.2139, swd: 2.6744, ept: 72.7188
+    Epoch [43/50], Val Losses: mse: 12.2367, mae: 2.7942, huber: 2.3390, swd: 3.4405, ept: 67.6459
+    Epoch [43/50], Test Losses: mse: 13.1916, mae: 2.8659, huber: 2.4115, swd: 2.9125, ept: 64.5389
+      Epoch 43 composite train-obj: 2.213853
+    Epoch [43/50], Test Losses: mse: 13.2161, mae: 2.8696, huber: 2.4153, swd: 3.0828, ept: 65.4995
+    Best round's Test MSE: 13.2161, MAE: 2.8696, SWD: 3.0828
+    Best round's Validation MSE: 11.9013, MAE: 2.7590, SWD: 3.6427
+    Best round's Test verification MSE : 13.2161, MAE: 2.8696, SWD: 3.0828
+    Time taken: 50.89 seconds
+    
+    ==================================================
+    Experiment Summary (DLinear_lorenz96_seq336_pred336_20250512_2142)
+    ==================================================
+    Number of runs: 3
+    Seeds: [1955, 7, 20]
+    
+    Test Performance at Best Validation (mean ± std):
+      mse: 13.2813 ± 0.0762
+      mae: 2.8805 ± 0.0106
+      huber: 2.4255 ± 0.0102
+      swd: 3.2052 ± 0.0984
+      ept: 65.5581 ± 0.5990
+      count: 10.0000 ± 0.0000
+    
+    Corresponding Validation Performance (mean ± std):
+      mse: 12.0301 ± 0.1028
+      mae: 2.7741 ± 0.0121
+      huber: 2.3183 ± 0.0119
+      swd: 3.8946 ± 0.1781
+      ept: 66.8035 ± 1.0686
+      count: 10.0000 ± 0.0000
+    ==================================================
+    Three seeds Time taken: 126.11 seconds
+    
+    Experiment complete: DLinear_lorenz96_seq336_pred336_20250512_2142
+    Model: DLinear
+    Dataset: lorenz96
+    Sequence Length: 336
+    Prediction Length: 336
+    Seeds: [1955, 7, 20]
+    
+
+##### huber + 0.5
+
+
+
+```python
+importlib.reload(monotonic)
+importlib.reload(train_config)
+utils.reload_modules([utils])
+cfg = train_config.FlatDLinearConfig(
+    seq_len=336,
+    pred_len=336,
+    channels=data_mgr.datasets['lorenz96']['channels'],
+    batch_size=128,
+    learning_rate=9e-4,
+    seeds=[1955, 7, 20],
+    epochs=50, 
+    loss_backward_weights = [0.0, 0.0, 1.0, 0.5, 0.0],
+    loss_validate_weights = [0.0, 0.0, 1.0, 0.5, 0.0],
+)
+exp = execute_model_evaluation('lorenz96', cfg, data_mgr, scale=False)
+```
+
+    Reloading modules...
+      Reloaded: utils
+    Module reload complete.
+    Shape of training data: torch.Size([13300, 6])
+    Shape of validation data: torch.Size([1900, 6])
+    Shape of testing data: torch.Size([3800, 6])
+    global_std.shape: torch.Size([6])
+    Global Std for lorenz96: tensor([3.6750, 3.6678, 3.7240, 3.7347, 3.8038, 3.5588], device='cuda:0')
+    Train set sample shapes: torch.Size([336, 6]), torch.Size([336, 6])
+    Validation set sample shapes: torch.Size([336, 6]), torch.Size([336, 6])
+    Test set data shapes: torch.Size([3800, 6]), torch.Size([3800, 6])
+    Number of batches in train_loader: 99
+    Batch 0: Data shape torch.Size([128, 336, 6]), Target shape torch.Size([128, 336, 6])
+    
+    ==================================================
+    Data Preparation: lorenz96
+    ==================================================
+    Sequence Length: 336
+    Prediction Length: 336
+    Batch Size: 128
+    Scaling: No
+    Train Split: 0.7
+    Val Split: 0.8
+    Training Batches: 99
+    Validation Batches: 10
+    Test Batches: 25
+    ==================================================
+    
+    ==================================================
+     Running experiment with seed 1955 (1/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 18.8950, mae: 3.4596, huber: 2.9909, swd: 1.2993, ept: 11.0290
+    Epoch [1/50], Val Losses: mse: 18.2460, mae: 3.4273, huber: 2.9579, swd: 2.2720, ept: 20.4951
+    Epoch [1/50], Test Losses: mse: 18.6420, mae: 3.4263, huber: 2.9588, swd: 1.4554, ept: 21.0727
+      Epoch 1 composite train-obj: 3.640538
+            Val objective improved inf → 4.0939, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 16.2516, mae: 3.1738, huber: 2.7103, swd: 1.0703, ept: 26.7546
+    Epoch [2/50], Val Losses: mse: 17.8824, mae: 3.3741, huber: 2.9068, swd: 2.2753, ept: 28.5306
+    Epoch [2/50], Test Losses: mse: 18.2678, mae: 3.3800, huber: 2.9140, swd: 1.4348, ept: 28.0585
+      Epoch 2 composite train-obj: 3.245476
+            Val objective improved 4.0939 → 4.0445, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 15.8729, mae: 3.1231, huber: 2.6617, swd: 1.0357, ept: 31.2115
+    Epoch [3/50], Val Losses: mse: 17.6597, mae: 3.3489, huber: 2.8829, swd: 2.2207, ept: 31.2855
+    Epoch [3/50], Test Losses: mse: 17.9909, mae: 3.3427, huber: 2.8784, swd: 1.4249, ept: 30.7494
+      Epoch 3 composite train-obj: 3.179547
+            Val objective improved 4.0445 → 3.9933, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 15.6320, mae: 3.0918, huber: 2.6316, swd: 1.0112, ept: 33.2034
+    Epoch [4/50], Val Losses: mse: 17.3292, mae: 3.3128, huber: 2.8477, swd: 2.2151, ept: 32.5273
+    Epoch [4/50], Test Losses: mse: 17.7234, mae: 3.3126, huber: 2.8489, swd: 1.4147, ept: 32.5875
+      Epoch 4 composite train-obj: 3.137174
+            Val objective improved 3.9933 → 3.9552, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 15.4413, mae: 3.0696, huber: 2.6101, swd: 0.9989, ept: 34.2213
+    Epoch [5/50], Val Losses: mse: 16.9840, mae: 3.2758, huber: 2.8114, swd: 2.0808, ept: 33.7203
+    Epoch [5/50], Test Losses: mse: 17.5009, mae: 3.2888, huber: 2.8260, swd: 1.3282, ept: 33.6369
+      Epoch 5 composite train-obj: 3.109551
+            Val objective improved 3.9552 → 3.8518, saving checkpoint.
+    Epoch [6/50], Train Losses: mse: 15.2631, mae: 3.0475, huber: 2.5888, swd: 0.9765, ept: 35.5638
+    Epoch [6/50], Val Losses: mse: 16.8266, mae: 3.2630, huber: 2.7986, swd: 2.1389, ept: 34.4512
+    Epoch [6/50], Test Losses: mse: 17.2996, mae: 3.2686, huber: 2.8059, swd: 1.3953, ept: 34.6891
+      Epoch 6 composite train-obj: 3.077060
+            No improvement (3.8680), counter 1/5
+    Epoch [7/50], Train Losses: mse: 15.1249, mae: 3.0308, huber: 2.5724, swd: 0.9638, ept: 36.2026
+    Epoch [7/50], Val Losses: mse: 16.6688, mae: 3.2436, huber: 2.7800, swd: 2.0668, ept: 35.3515
+    Epoch [7/50], Test Losses: mse: 17.1918, mae: 3.2532, huber: 2.7914, swd: 1.3209, ept: 35.4834
+      Epoch 7 composite train-obj: 3.054309
+            Val objective improved 3.8518 → 3.8134, saving checkpoint.
+    Epoch [8/50], Train Losses: mse: 14.9924, mae: 3.0109, huber: 2.5532, swd: 0.9410, ept: 37.0483
+    Epoch [8/50], Val Losses: mse: 16.5620, mae: 3.2264, huber: 2.7627, swd: 2.0377, ept: 36.0986
+    Epoch [8/50], Test Losses: mse: 16.9798, mae: 3.2246, huber: 2.7629, swd: 1.3042, ept: 36.4106
+      Epoch 8 composite train-obj: 3.023739
+            Val objective improved 3.8134 → 3.7816, saving checkpoint.
+    Epoch [9/50], Train Losses: mse: 14.9289, mae: 2.9960, huber: 2.5385, swd: 0.9254, ept: 37.9106
+    Epoch [9/50], Val Losses: mse: 16.3226, mae: 3.1917, huber: 2.7291, swd: 2.0221, ept: 37.5142
+    Epoch [9/50], Test Losses: mse: 16.9004, mae: 3.2124, huber: 2.7513, swd: 1.2893, ept: 36.6276
+      Epoch 9 composite train-obj: 3.001249
+            Val objective improved 3.7816 → 3.7401, saving checkpoint.
+    Epoch [10/50], Train Losses: mse: 14.8586, mae: 2.9802, huber: 2.5231, swd: 0.9071, ept: 38.6757
+    Epoch [10/50], Val Losses: mse: 16.4113, mae: 3.1952, huber: 2.7321, swd: 1.9746, ept: 37.3271
+    Epoch [10/50], Test Losses: mse: 16.9847, mae: 3.2111, huber: 2.7501, swd: 1.2827, ept: 37.3197
+      Epoch 10 composite train-obj: 2.976629
+            Val objective improved 3.7401 → 3.7194, saving checkpoint.
+    Epoch [11/50], Train Losses: mse: 14.7930, mae: 2.9649, huber: 2.5082, swd: 0.8880, ept: 39.2854
+    Epoch [11/50], Val Losses: mse: 16.0880, mae: 3.1565, huber: 2.6939, swd: 1.8842, ept: 37.7015
+    Epoch [11/50], Test Losses: mse: 16.8104, mae: 3.1929, huber: 2.7318, swd: 1.2447, ept: 37.3500
+      Epoch 11 composite train-obj: 2.952158
+            Val objective improved 3.7194 → 3.6360, saving checkpoint.
+    Epoch [12/50], Train Losses: mse: 14.7002, mae: 2.9527, huber: 2.4961, swd: 0.8757, ept: 39.6947
+    Epoch [12/50], Val Losses: mse: 16.3104, mae: 3.1754, huber: 2.7129, swd: 1.9207, ept: 38.2304
+    Epoch [12/50], Test Losses: mse: 16.8695, mae: 3.1917, huber: 2.7307, swd: 1.2271, ept: 37.6970
+      Epoch 12 composite train-obj: 2.933962
+            No improvement (3.6733), counter 1/5
+    Epoch [13/50], Train Losses: mse: 14.5769, mae: 2.9378, huber: 2.4815, swd: 0.8558, ept: 40.4242
+    Epoch [13/50], Val Losses: mse: 15.8133, mae: 3.1201, huber: 2.6577, swd: 1.7997, ept: 38.5072
+    Epoch [13/50], Test Losses: mse: 16.6916, mae: 3.1789, huber: 2.7180, swd: 1.2040, ept: 37.8600
+      Epoch 13 composite train-obj: 2.909382
+            Val objective improved 3.6360 → 3.5575, saving checkpoint.
+    Epoch [14/50], Train Losses: mse: 14.4731, mae: 2.9257, huber: 2.4698, swd: 0.8373, ept: 40.7516
+    Epoch [14/50], Val Losses: mse: 15.7678, mae: 3.1194, huber: 2.6571, swd: 1.7561, ept: 38.6197
+    Epoch [14/50], Test Losses: mse: 16.4183, mae: 3.1494, huber: 2.6893, swd: 1.1639, ept: 38.4247
+      Epoch 14 composite train-obj: 2.888399
+            Val objective improved 3.5575 → 3.5352, saving checkpoint.
+    Epoch [15/50], Train Losses: mse: 14.3482, mae: 2.9136, huber: 2.4577, swd: 0.8212, ept: 41.1591
+    Epoch [15/50], Val Losses: mse: 15.3825, mae: 3.0804, huber: 2.6186, swd: 1.6891, ept: 39.8458
+    Epoch [15/50], Test Losses: mse: 16.3671, mae: 3.1400, huber: 2.6803, swd: 1.1430, ept: 39.7657
+      Epoch 15 composite train-obj: 2.868318
+            Val objective improved 3.5352 → 3.4632, saving checkpoint.
+    Epoch [16/50], Train Losses: mse: 14.2420, mae: 2.9028, huber: 2.4471, swd: 0.8030, ept: 41.5352
+    Epoch [16/50], Val Losses: mse: 15.3039, mae: 3.0792, huber: 2.6176, swd: 1.6837, ept: 39.4186
+    Epoch [16/50], Test Losses: mse: 16.0824, mae: 3.1136, huber: 2.6542, swd: 1.1243, ept: 39.8165
+      Epoch 16 composite train-obj: 2.848610
+            Val objective improved 3.4632 → 3.4594, saving checkpoint.
+    Epoch [17/50], Train Losses: mse: 14.1183, mae: 2.8917, huber: 2.4362, swd: 0.7875, ept: 41.9798
+    Epoch [17/50], Val Losses: mse: 15.1465, mae: 3.0617, huber: 2.5997, swd: 1.6136, ept: 40.2721
+    Epoch [17/50], Test Losses: mse: 16.0478, mae: 3.1119, huber: 2.6521, swd: 1.1205, ept: 39.7830
+      Epoch 17 composite train-obj: 2.830016
+            Val objective improved 3.4594 → 3.4065, saving checkpoint.
+    Epoch [18/50], Train Losses: mse: 14.0087, mae: 2.8820, huber: 2.4266, swd: 0.7702, ept: 42.3333
+    Epoch [18/50], Val Losses: mse: 15.0719, mae: 3.0585, huber: 2.5965, swd: 1.5616, ept: 40.2197
+    Epoch [18/50], Test Losses: mse: 15.9750, mae: 3.1070, huber: 2.6475, swd: 1.0773, ept: 40.2122
+      Epoch 18 composite train-obj: 2.811734
+            Val objective improved 3.4065 → 3.3773, saving checkpoint.
+    Epoch [19/50], Train Losses: mse: 13.8998, mae: 2.8729, huber: 2.4176, swd: 0.7593, ept: 42.7561
+    Epoch [19/50], Val Losses: mse: 14.8497, mae: 3.0365, huber: 2.5751, swd: 1.5151, ept: 41.0114
+    Epoch [19/50], Test Losses: mse: 15.7769, mae: 3.0845, huber: 2.6255, swd: 1.0390, ept: 40.6725
+      Epoch 19 composite train-obj: 2.797279
+            Val objective improved 3.3773 → 3.3327, saving checkpoint.
+    Epoch [20/50], Train Losses: mse: 13.7961, mae: 2.8640, huber: 2.4088, swd: 0.7443, ept: 42.9712
+    Epoch [20/50], Val Losses: mse: 14.7889, mae: 3.0329, huber: 2.5712, swd: 1.4933, ept: 41.1749
+    Epoch [20/50], Test Losses: mse: 15.7026, mae: 3.0822, huber: 2.6228, swd: 1.0120, ept: 40.8982
+      Epoch 20 composite train-obj: 2.780930
+            Val objective improved 3.3327 → 3.3179, saving checkpoint.
+    Epoch [21/50], Train Losses: mse: 13.6834, mae: 2.8546, huber: 2.3996, swd: 0.7272, ept: 43.3720
+    Epoch [21/50], Val Losses: mse: 14.4700, mae: 3.0013, huber: 2.5401, swd: 1.4358, ept: 41.5039
+    Epoch [21/50], Test Losses: mse: 15.7150, mae: 3.0858, huber: 2.6268, swd: 1.0341, ept: 40.8958
+      Epoch 21 composite train-obj: 2.763183
+            Val objective improved 3.3179 → 3.2580, saving checkpoint.
+    Epoch [22/50], Train Losses: mse: 13.5908, mae: 2.8478, huber: 2.3928, swd: 0.7129, ept: 43.6581
+    Epoch [22/50], Val Losses: mse: 14.5213, mae: 3.0110, huber: 2.5497, swd: 1.4303, ept: 42.0208
+    Epoch [22/50], Test Losses: mse: 15.5406, mae: 3.0685, huber: 2.6093, swd: 1.0225, ept: 41.3526
+      Epoch 22 composite train-obj: 2.749290
+            No improvement (3.2648), counter 1/5
+    Epoch [23/50], Train Losses: mse: 13.4893, mae: 2.8400, huber: 2.3853, swd: 0.6979, ept: 43.8899
+    Epoch [23/50], Val Losses: mse: 14.2801, mae: 2.9935, huber: 2.5320, swd: 1.3983, ept: 41.7839
+    Epoch [23/50], Test Losses: mse: 15.4683, mae: 3.0631, huber: 2.6039, swd: 1.0295, ept: 41.5558
+      Epoch 23 composite train-obj: 2.734220
+            Val objective improved 3.2580 → 3.2311, saving checkpoint.
+    Epoch [24/50], Train Losses: mse: 13.3960, mae: 2.8332, huber: 2.3785, swd: 0.6881, ept: 44.1627
+    Epoch [24/50], Val Losses: mse: 14.2327, mae: 2.9848, huber: 2.5235, swd: 1.3799, ept: 41.5580
+    Epoch [24/50], Test Losses: mse: 15.4149, mae: 3.0578, huber: 2.5987, swd: 0.9807, ept: 41.6537
+      Epoch 24 composite train-obj: 2.722586
+            Val objective improved 3.2311 → 3.2135, saving checkpoint.
+    Epoch [25/50], Train Losses: mse: 13.3169, mae: 2.8276, huber: 2.3730, swd: 0.6795, ept: 44.3664
+    Epoch [25/50], Val Losses: mse: 14.2307, mae: 2.9900, huber: 2.5288, swd: 1.3673, ept: 41.7852
+    Epoch [25/50], Test Losses: mse: 15.3037, mae: 3.0493, huber: 2.5904, swd: 0.9882, ept: 42.3810
+      Epoch 25 composite train-obj: 2.712758
+            Val objective improved 3.2135 → 3.2124, saving checkpoint.
+    Epoch [26/50], Train Losses: mse: 13.2319, mae: 2.8216, huber: 2.3671, swd: 0.6646, ept: 44.6237
+    Epoch [26/50], Val Losses: mse: 13.9275, mae: 2.9630, huber: 2.5020, swd: 1.3229, ept: 42.7914
+    Epoch [26/50], Test Losses: mse: 15.2681, mae: 3.0484, huber: 2.5900, swd: 0.9883, ept: 42.7764
+      Epoch 26 composite train-obj: 2.699374
+            Val objective improved 3.2124 → 3.1635, saving checkpoint.
+    Epoch [27/50], Train Losses: mse: 13.1605, mae: 2.8161, huber: 2.3617, swd: 0.6604, ept: 44.8368
+    Epoch [27/50], Val Losses: mse: 13.7185, mae: 2.9486, huber: 2.4873, swd: 1.3275, ept: 42.3626
+    Epoch [27/50], Test Losses: mse: 15.0285, mae: 3.0303, huber: 2.5713, swd: 0.9866, ept: 42.5941
+      Epoch 27 composite train-obj: 2.691896
+            Val objective improved 3.1635 → 3.1510, saving checkpoint.
+    Epoch [28/50], Train Losses: mse: 13.0972, mae: 2.8117, huber: 2.3574, swd: 0.6509, ept: 45.0767
+    Epoch [28/50], Val Losses: mse: 13.7251, mae: 2.9433, huber: 2.4826, swd: 1.2541, ept: 41.8699
+    Epoch [28/50], Test Losses: mse: 15.0635, mae: 3.0301, huber: 2.5717, swd: 0.9360, ept: 42.2398
+      Epoch 28 composite train-obj: 2.682822
+            Val objective improved 3.1510 → 3.1096, saving checkpoint.
+    Epoch [29/50], Train Losses: mse: 13.0362, mae: 2.8083, huber: 2.3540, swd: 0.6419, ept: 45.0905
+    Epoch [29/50], Val Losses: mse: 13.5544, mae: 2.9321, huber: 2.4710, swd: 1.2651, ept: 43.0499
+    Epoch [29/50], Test Losses: mse: 15.0143, mae: 3.0329, huber: 2.5740, swd: 0.9836, ept: 43.2245
+      Epoch 29 composite train-obj: 2.674906
+            Val objective improved 3.1096 → 3.1036, saving checkpoint.
+    Epoch [30/50], Train Losses: mse: 12.9790, mae: 2.8043, huber: 2.3500, swd: 0.6348, ept: 45.2167
+    Epoch [30/50], Val Losses: mse: 13.6742, mae: 2.9464, huber: 2.4851, swd: 1.2360, ept: 41.6382
+    Epoch [30/50], Test Losses: mse: 15.0483, mae: 3.0377, huber: 2.5786, swd: 0.9382, ept: 42.3616
+      Epoch 30 composite train-obj: 2.667391
+            Val objective improved 3.1036 → 3.1031, saving checkpoint.
+    Epoch [31/50], Train Losses: mse: 12.9249, mae: 2.8000, huber: 2.3459, swd: 0.6296, ept: 45.4068
+    Epoch [31/50], Val Losses: mse: 13.4528, mae: 2.9235, huber: 2.4627, swd: 1.2106, ept: 43.7458
+    Epoch [31/50], Test Losses: mse: 14.8656, mae: 3.0165, huber: 2.5579, swd: 0.9067, ept: 44.3329
+      Epoch 31 composite train-obj: 2.660712
+            Val objective improved 3.1031 → 3.0680, saving checkpoint.
+    Epoch [32/50], Train Losses: mse: 12.8897, mae: 2.7972, huber: 2.3431, swd: 0.6234, ept: 45.6615
+    Epoch [32/50], Val Losses: mse: 13.4236, mae: 2.9236, huber: 2.4630, swd: 1.1722, ept: 42.7539
+    Epoch [32/50], Test Losses: mse: 14.9003, mae: 3.0219, huber: 2.5638, swd: 0.9136, ept: 43.2681
+      Epoch 32 composite train-obj: 2.654782
+            Val objective improved 3.0680 → 3.0491, saving checkpoint.
+    Epoch [33/50], Train Losses: mse: 12.8470, mae: 2.7936, huber: 2.3396, swd: 0.6151, ept: 45.7359
+    Epoch [33/50], Val Losses: mse: 13.3247, mae: 2.9083, huber: 2.4481, swd: 1.1484, ept: 42.2835
+    Epoch [33/50], Test Losses: mse: 14.8056, mae: 3.0110, huber: 2.5529, swd: 0.8857, ept: 43.5730
+      Epoch 33 composite train-obj: 2.647213
+            Val objective improved 3.0491 → 3.0223, saving checkpoint.
+    Epoch [34/50], Train Losses: mse: 12.8171, mae: 2.7912, huber: 2.3374, swd: 0.6091, ept: 45.6481
+    Epoch [34/50], Val Losses: mse: 13.2019, mae: 2.9036, huber: 2.4431, swd: 1.1543, ept: 43.2528
+    Epoch [34/50], Test Losses: mse: 14.6358, mae: 2.9969, huber: 2.5390, swd: 0.9080, ept: 43.8330
+      Epoch 34 composite train-obj: 2.641897
+            Val objective improved 3.0223 → 3.0202, saving checkpoint.
+    Epoch [35/50], Train Losses: mse: 12.7940, mae: 2.7894, huber: 2.3356, swd: 0.6084, ept: 45.9158
+    Epoch [35/50], Val Losses: mse: 13.1482, mae: 2.8993, huber: 2.4388, swd: 1.1218, ept: 43.1620
+    Epoch [35/50], Test Losses: mse: 14.6315, mae: 2.9964, huber: 2.5383, swd: 0.9038, ept: 44.4379
+      Epoch 35 composite train-obj: 2.639798
+            Val objective improved 3.0202 → 2.9997, saving checkpoint.
+    Epoch [36/50], Train Losses: mse: 12.7652, mae: 2.7866, huber: 2.3328, swd: 0.6056, ept: 46.0767
+    Epoch [36/50], Val Losses: mse: 13.1660, mae: 2.9011, huber: 2.4403, swd: 1.1773, ept: 43.0152
+    Epoch [36/50], Test Losses: mse: 14.7830, mae: 3.0099, huber: 2.5518, swd: 0.9021, ept: 44.0081
+      Epoch 36 composite train-obj: 2.635595
+            No improvement (3.0290), counter 1/5
+    Epoch [37/50], Train Losses: mse: 12.7519, mae: 2.7845, huber: 2.3310, swd: 0.6028, ept: 46.3204
+    Epoch [37/50], Val Losses: mse: 13.1608, mae: 2.8960, huber: 2.4358, swd: 1.1232, ept: 43.2007
+    Epoch [37/50], Test Losses: mse: 14.6402, mae: 2.9950, huber: 2.5371, swd: 0.8802, ept: 44.5702
+      Epoch 37 composite train-obj: 2.632397
+            Val objective improved 2.9997 → 2.9974, saving checkpoint.
+    Epoch [38/50], Train Losses: mse: 12.7342, mae: 2.7833, huber: 2.3297, swd: 0.6005, ept: 46.3205
+    Epoch [38/50], Val Losses: mse: 13.2209, mae: 2.9043, huber: 2.4440, swd: 1.0952, ept: 42.4357
+    Epoch [38/50], Test Losses: mse: 14.8366, mae: 3.0153, huber: 2.5574, swd: 0.8769, ept: 43.0854
+      Epoch 38 composite train-obj: 2.629918
+            Val objective improved 2.9974 → 2.9916, saving checkpoint.
+    Epoch [39/50], Train Losses: mse: 12.7250, mae: 2.7815, huber: 2.3280, swd: 0.5948, ept: 46.4911
+    Epoch [39/50], Val Losses: mse: 13.0028, mae: 2.8785, huber: 2.4187, swd: 1.0959, ept: 43.7285
+    Epoch [39/50], Test Losses: mse: 14.6510, mae: 2.9991, huber: 2.5414, swd: 0.8920, ept: 44.0410
+      Epoch 39 composite train-obj: 2.625459
+            Val objective improved 2.9916 → 2.9666, saving checkpoint.
+    Epoch [40/50], Train Losses: mse: 12.7152, mae: 2.7806, huber: 2.3271, swd: 0.5972, ept: 46.4907
+    Epoch [40/50], Val Losses: mse: 13.2198, mae: 2.9020, huber: 2.4417, swd: 1.0756, ept: 42.0834
+    Epoch [40/50], Test Losses: mse: 14.8478, mae: 3.0158, huber: 2.5576, swd: 0.8632, ept: 43.0249
+      Epoch 40 composite train-obj: 2.625719
+            No improvement (2.9795), counter 1/5
+    Epoch [41/50], Train Losses: mse: 12.6997, mae: 2.7781, huber: 2.3249, swd: 0.5887, ept: 46.6405
+    Epoch [41/50], Val Losses: mse: 13.1022, mae: 2.8925, huber: 2.4321, swd: 1.1108, ept: 43.0656
+    Epoch [41/50], Test Losses: mse: 14.6122, mae: 2.9909, huber: 2.5335, swd: 0.8942, ept: 44.6737
+      Epoch 41 composite train-obj: 2.619253
+            No improvement (2.9875), counter 2/5
+    Epoch [42/50], Train Losses: mse: 12.7022, mae: 2.7782, huber: 2.3249, swd: 0.5946, ept: 46.6680
+    Epoch [42/50], Val Losses: mse: 13.1280, mae: 2.8941, huber: 2.4341, swd: 1.0932, ept: 44.0425
+    Epoch [42/50], Test Losses: mse: 14.6060, mae: 2.9892, huber: 2.5317, swd: 0.8786, ept: 44.7522
+      Epoch 42 composite train-obj: 2.622245
+            No improvement (2.9807), counter 3/5
+    Epoch [43/50], Train Losses: mse: 12.6919, mae: 2.7766, huber: 2.3234, swd: 0.5908, ept: 46.9092
+    Epoch [43/50], Val Losses: mse: 13.0379, mae: 2.8867, huber: 2.4268, swd: 1.0462, ept: 43.4170
+    Epoch [43/50], Test Losses: mse: 14.6008, mae: 2.9908, huber: 2.5335, swd: 0.9082, ept: 44.1557
+      Epoch 43 composite train-obj: 2.618811
+            Val objective improved 2.9666 → 2.9499, saving checkpoint.
+    Epoch [44/50], Train Losses: mse: 12.6773, mae: 2.7749, huber: 2.3220, swd: 0.5868, ept: 46.8777
+    Epoch [44/50], Val Losses: mse: 12.9867, mae: 2.8736, huber: 2.4144, swd: 1.0561, ept: 43.5558
+    Epoch [44/50], Test Losses: mse: 14.6598, mae: 2.9955, huber: 2.5384, swd: 0.8475, ept: 45.1959
+      Epoch 44 composite train-obj: 2.615352
+            Val objective improved 2.9499 → 2.9425, saving checkpoint.
+    Epoch [45/50], Train Losses: mse: 12.6753, mae: 2.7743, huber: 2.3213, swd: 0.5912, ept: 47.0169
+    Epoch [45/50], Val Losses: mse: 13.1800, mae: 2.8963, huber: 2.4367, swd: 1.0549, ept: 42.5962
+    Epoch [45/50], Test Losses: mse: 14.5837, mae: 2.9917, huber: 2.5343, swd: 0.9028, ept: 44.2665
+      Epoch 45 composite train-obj: 2.616931
+            No improvement (2.9642), counter 1/5
+    Epoch [46/50], Train Losses: mse: 12.6573, mae: 2.7720, huber: 2.3191, swd: 0.5861, ept: 47.1168
+    Epoch [46/50], Val Losses: mse: 13.0262, mae: 2.8818, huber: 2.4219, swd: 1.0713, ept: 43.2281
+    Epoch [46/50], Test Losses: mse: 14.5464, mae: 2.9826, huber: 2.5253, swd: 0.8921, ept: 44.6896
+      Epoch 46 composite train-obj: 2.612132
+            No improvement (2.9575), counter 2/5
+    Epoch [47/50], Train Losses: mse: 12.6628, mae: 2.7729, huber: 2.3199, swd: 0.5881, ept: 47.1076
+    Epoch [47/50], Val Losses: mse: 13.0147, mae: 2.8803, huber: 2.4210, swd: 1.1138, ept: 44.0818
+    Epoch [47/50], Test Losses: mse: 14.5117, mae: 2.9861, huber: 2.5289, swd: 0.9312, ept: 44.8512
+      Epoch 47 composite train-obj: 2.613999
+            No improvement (2.9779), counter 3/5
+    Epoch [48/50], Train Losses: mse: 12.6512, mae: 2.7713, huber: 2.3184, swd: 0.5880, ept: 47.2117
+    Epoch [48/50], Val Losses: mse: 13.1410, mae: 2.8974, huber: 2.4376, swd: 1.0875, ept: 43.1537
+    Epoch [48/50], Test Losses: mse: 14.5732, mae: 2.9877, huber: 2.5303, swd: 0.8625, ept: 44.6466
+      Epoch 48 composite train-obj: 2.612401
+            No improvement (2.9813), counter 4/5
+    Epoch [49/50], Train Losses: mse: 12.6430, mae: 2.7699, huber: 2.3172, swd: 0.5845, ept: 47.4159
+    Epoch [49/50], Val Losses: mse: 13.2346, mae: 2.9013, huber: 2.4414, swd: 1.0460, ept: 42.5528
+    Epoch [49/50], Test Losses: mse: 14.6973, mae: 3.0009, huber: 2.5435, swd: 0.8929, ept: 45.0741
+      Epoch 49 composite train-obj: 2.609409
+    Epoch [49/50], Test Losses: mse: 14.6598, mae: 2.9955, huber: 2.5384, swd: 0.8475, ept: 45.1959
+    Best round's Test MSE: 14.6598, MAE: 2.9955, SWD: 0.8475
+    Best round's Validation MSE: 12.9867, MAE: 2.8736, SWD: 1.0561
+    Best round's Test verification MSE : 14.6598, MAE: 2.9955, SWD: 0.8475
+    Time taken: 53.01 seconds
+    
+    ==================================================
+     Running experiment with seed 7 (2/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 19.0626, mae: 3.4759, huber: 3.0070, swd: 1.3463, ept: 9.2289
+    Epoch [1/50], Val Losses: mse: 18.5389, mae: 3.4539, huber: 2.9842, swd: 2.4569, ept: 18.2331
+    Epoch [1/50], Test Losses: mse: 18.8659, mae: 3.4495, huber: 2.9816, swd: 1.5311, ept: 17.8437
+      Epoch 1 composite train-obj: 3.680204
+            Val objective improved inf → 4.2126, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 16.3402, mae: 3.1831, huber: 2.7193, swd: 1.1042, ept: 25.1158
+    Epoch [2/50], Val Losses: mse: 18.1355, mae: 3.3959, huber: 2.9286, swd: 2.4016, ept: 27.0649
+    Epoch [2/50], Test Losses: mse: 18.4212, mae: 3.3884, huber: 2.9226, swd: 1.5075, ept: 26.9761
+      Epoch 2 composite train-obj: 3.271454
+            Val objective improved 4.2126 → 4.1294, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 15.9916, mae: 3.1290, huber: 2.6674, swd: 1.0674, ept: 30.3074
+    Epoch [3/50], Val Losses: mse: 17.7143, mae: 3.3498, huber: 2.8837, swd: 2.3491, ept: 30.6472
+    Epoch [3/50], Test Losses: mse: 18.0111, mae: 3.3379, huber: 2.8736, swd: 1.4808, ept: 30.0772
+      Epoch 3 composite train-obj: 3.201154
+            Val objective improved 4.1294 → 4.0582, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 15.8456, mae: 3.0987, huber: 2.6385, swd: 1.0451, ept: 32.4837
+    Epoch [4/50], Val Losses: mse: 17.5177, mae: 3.3167, huber: 2.8514, swd: 2.3101, ept: 32.3581
+    Epoch [4/50], Test Losses: mse: 17.9209, mae: 3.3168, huber: 2.8532, swd: 1.4756, ept: 31.8770
+      Epoch 4 composite train-obj: 3.160988
+            Val objective improved 4.0582 → 4.0065, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 15.7163, mae: 3.0738, huber: 2.6144, swd: 1.0263, ept: 34.0486
+    Epoch [5/50], Val Losses: mse: 17.2994, mae: 3.2932, huber: 2.8281, swd: 2.1490, ept: 32.8446
+    Epoch [5/50], Test Losses: mse: 17.6548, mae: 3.2868, huber: 2.8238, swd: 1.4101, ept: 33.3728
+      Epoch 5 composite train-obj: 3.127569
+            Val objective improved 4.0065 → 3.9026, saving checkpoint.
+    Epoch [6/50], Train Losses: mse: 15.5699, mae: 3.0526, huber: 2.5938, swd: 1.0039, ept: 35.2875
+    Epoch [6/50], Val Losses: mse: 17.0690, mae: 3.2613, huber: 2.7970, swd: 2.2295, ept: 34.5815
+    Epoch [6/50], Test Losses: mse: 17.5216, mae: 3.2643, huber: 2.8016, swd: 1.4351, ept: 33.7412
+      Epoch 6 composite train-obj: 3.095791
+            No improvement (3.9117), counter 1/5
+    Epoch [7/50], Train Losses: mse: 15.4435, mae: 3.0330, huber: 2.5747, swd: 0.9902, ept: 36.3243
+    Epoch [7/50], Val Losses: mse: 17.1216, mae: 3.2514, huber: 2.7875, swd: 2.1214, ept: 35.1817
+    Epoch [7/50], Test Losses: mse: 17.5993, mae: 3.2649, huber: 2.8027, swd: 1.3800, ept: 34.5229
+      Epoch 7 composite train-obj: 3.069853
+            Val objective improved 3.9026 → 3.8482, saving checkpoint.
+    Epoch [8/50], Train Losses: mse: 15.3705, mae: 3.0164, huber: 2.5586, swd: 0.9706, ept: 37.2442
+    Epoch [8/50], Val Losses: mse: 16.8364, mae: 3.2210, huber: 2.7579, swd: 2.1464, ept: 35.9210
+    Epoch [8/50], Test Losses: mse: 17.5785, mae: 3.2519, huber: 2.7904, swd: 1.3711, ept: 35.2450
+      Epoch 8 composite train-obj: 3.043918
+            Val objective improved 3.8482 → 3.8311, saving checkpoint.
+    Epoch [9/50], Train Losses: mse: 15.2772, mae: 2.9982, huber: 2.5409, swd: 0.9522, ept: 38.0287
+    Epoch [9/50], Val Losses: mse: 16.7005, mae: 3.2012, huber: 2.7380, swd: 2.0593, ept: 37.1939
+    Epoch [9/50], Test Losses: mse: 17.3453, mae: 3.2257, huber: 2.7639, swd: 1.3386, ept: 36.4741
+      Epoch 9 composite train-obj: 3.016963
+            Val objective improved 3.8311 → 3.7676, saving checkpoint.
+    Epoch [10/50], Train Losses: mse: 15.2234, mae: 2.9843, huber: 2.5273, swd: 0.9367, ept: 38.7182
+    Epoch [10/50], Val Losses: mse: 16.4377, mae: 3.1717, huber: 2.7095, swd: 2.0084, ept: 38.6472
+    Epoch [10/50], Test Losses: mse: 17.1331, mae: 3.1962, huber: 2.7356, swd: 1.3243, ept: 37.7016
+      Epoch 10 composite train-obj: 2.995693
+            Val objective improved 3.7676 → 3.7137, saving checkpoint.
+    Epoch [11/50], Train Losses: mse: 15.1070, mae: 2.9680, huber: 2.5113, swd: 0.9180, ept: 39.4896
+    Epoch [11/50], Val Losses: mse: 16.4325, mae: 3.1710, huber: 2.7083, swd: 2.0572, ept: 37.9554
+    Epoch [11/50], Test Losses: mse: 16.9583, mae: 3.1741, huber: 2.7135, swd: 1.2924, ept: 37.4458
+      Epoch 11 composite train-obj: 2.970285
+            No improvement (3.7369), counter 1/5
+    Epoch [12/50], Train Losses: mse: 15.0033, mae: 2.9568, huber: 2.5002, swd: 0.9077, ept: 39.7949
+    Epoch [12/50], Val Losses: mse: 16.2014, mae: 3.1470, huber: 2.6843, swd: 1.9098, ept: 38.1375
+    Epoch [12/50], Test Losses: mse: 16.9767, mae: 3.1790, huber: 2.7183, swd: 1.2315, ept: 37.7298
+      Epoch 12 composite train-obj: 2.954014
+            Val objective improved 3.7137 → 3.6392, saving checkpoint.
+    Epoch [13/50], Train Losses: mse: 14.8651, mae: 2.9415, huber: 2.4853, swd: 0.8855, ept: 40.3753
+    Epoch [13/50], Val Losses: mse: 16.2410, mae: 3.1464, huber: 2.6842, swd: 1.9011, ept: 38.5808
+    Epoch [13/50], Test Losses: mse: 16.9231, mae: 3.1704, huber: 2.7101, swd: 1.2343, ept: 38.2676
+      Epoch 13 composite train-obj: 2.928095
+            Val objective improved 3.6392 → 3.6348, saving checkpoint.
+    Epoch [14/50], Train Losses: mse: 14.7430, mae: 2.9304, huber: 2.4744, swd: 0.8729, ept: 40.8122
+    Epoch [14/50], Val Losses: mse: 15.8709, mae: 3.1119, huber: 2.6501, swd: 1.8592, ept: 39.0701
+    Epoch [14/50], Test Losses: mse: 16.6812, mae: 3.1476, huber: 2.6877, swd: 1.2462, ept: 39.1137
+      Epoch 14 composite train-obj: 2.910865
+            Val objective improved 3.6348 → 3.5797, saving checkpoint.
+    Epoch [15/50], Train Losses: mse: 14.6111, mae: 2.9181, huber: 2.4623, swd: 0.8533, ept: 41.2678
+    Epoch [15/50], Val Losses: mse: 15.7923, mae: 3.1076, huber: 2.6455, swd: 1.8144, ept: 39.5396
+    Epoch [15/50], Test Losses: mse: 16.6463, mae: 3.1504, huber: 2.6901, swd: 1.2386, ept: 39.3328
+      Epoch 15 composite train-obj: 2.888928
+            Val objective improved 3.5797 → 3.5527, saving checkpoint.
+    Epoch [16/50], Train Losses: mse: 14.4771, mae: 2.9073, huber: 2.4515, swd: 0.8376, ept: 41.6004
+    Epoch [16/50], Val Losses: mse: 15.8014, mae: 3.1118, huber: 2.6497, swd: 1.7519, ept: 39.5476
+    Epoch [16/50], Test Losses: mse: 16.6106, mae: 3.1425, huber: 2.6824, swd: 1.2007, ept: 39.3799
+      Epoch 16 composite train-obj: 2.870320
+            Val objective improved 3.5527 → 3.5256, saving checkpoint.
+    Epoch [17/50], Train Losses: mse: 14.3379, mae: 2.8960, huber: 2.4404, swd: 0.8178, ept: 42.1938
+    Epoch [17/50], Val Losses: mse: 15.1693, mae: 3.0535, huber: 2.5917, swd: 1.7032, ept: 39.8318
+    Epoch [17/50], Test Losses: mse: 16.2861, mae: 3.1187, huber: 2.6590, swd: 1.1808, ept: 39.9448
+      Epoch 17 composite train-obj: 2.849367
+            Val objective improved 3.5256 → 3.4434, saving checkpoint.
+    Epoch [18/50], Train Losses: mse: 14.2200, mae: 2.8865, huber: 2.4312, swd: 0.8022, ept: 42.3891
+    Epoch [18/50], Val Losses: mse: 15.1512, mae: 3.0514, huber: 2.5900, swd: 1.6612, ept: 40.3391
+    Epoch [18/50], Test Losses: mse: 16.1521, mae: 3.1044, huber: 2.6451, swd: 1.1436, ept: 40.9085
+      Epoch 18 composite train-obj: 2.832296
+            Val objective improved 3.4434 → 3.4206, saving checkpoint.
+    Epoch [19/50], Train Losses: mse: 14.0774, mae: 2.8753, huber: 2.4202, swd: 0.7877, ept: 42.8356
+    Epoch [19/50], Val Losses: mse: 14.9864, mae: 3.0349, huber: 2.5735, swd: 1.5830, ept: 40.5507
+    Epoch [19/50], Test Losses: mse: 15.9306, mae: 3.0880, huber: 2.6286, swd: 1.1053, ept: 40.7376
+      Epoch 19 composite train-obj: 2.814062
+            Val objective improved 3.4206 → 3.3650, saving checkpoint.
+    Epoch [20/50], Train Losses: mse: 13.9784, mae: 2.8684, huber: 2.4133, swd: 0.7719, ept: 43.1305
+    Epoch [20/50], Val Losses: mse: 14.8490, mae: 3.0248, huber: 2.5632, swd: 1.5944, ept: 41.0847
+    Epoch [20/50], Test Losses: mse: 16.0388, mae: 3.1014, huber: 2.6417, swd: 1.1009, ept: 41.1627
+      Epoch 20 composite train-obj: 2.799301
+            Val objective improved 3.3650 → 3.3604, saving checkpoint.
+    Epoch [21/50], Train Losses: mse: 13.8655, mae: 2.8605, huber: 2.4054, swd: 0.7614, ept: 43.5393
+    Epoch [21/50], Val Losses: mse: 14.7129, mae: 3.0173, huber: 2.5566, swd: 1.5489, ept: 41.9334
+    Epoch [21/50], Test Losses: mse: 15.7428, mae: 3.0725, huber: 2.6137, swd: 1.0555, ept: 42.1507
+      Epoch 21 composite train-obj: 2.786075
+            Val objective improved 3.3604 → 3.3310, saving checkpoint.
+    Epoch [22/50], Train Losses: mse: 13.7475, mae: 2.8516, huber: 2.3969, swd: 0.7443, ept: 43.9652
+    Epoch [22/50], Val Losses: mse: 14.5522, mae: 3.0035, huber: 2.5422, swd: 1.5663, ept: 41.5714
+    Epoch [22/50], Test Losses: mse: 15.6655, mae: 3.0727, huber: 2.6136, swd: 1.0857, ept: 42.6322
+      Epoch 22 composite train-obj: 2.768995
+            Val objective improved 3.3310 → 3.3254, saving checkpoint.
+    Epoch [23/50], Train Losses: mse: 13.6417, mae: 2.8434, huber: 2.3888, swd: 0.7304, ept: 44.3523
+    Epoch [23/50], Val Losses: mse: 14.2893, mae: 2.9847, huber: 2.5236, swd: 1.4921, ept: 41.6321
+    Epoch [23/50], Test Losses: mse: 15.6181, mae: 3.0664, huber: 2.6077, swd: 1.0557, ept: 42.4441
+      Epoch 23 composite train-obj: 2.753993
+            Val objective improved 3.3254 → 3.2697, saving checkpoint.
+    Epoch [24/50], Train Losses: mse: 13.5434, mae: 2.8369, huber: 2.3824, swd: 0.7190, ept: 44.6893
+    Epoch [24/50], Val Losses: mse: 14.2885, mae: 2.9859, huber: 2.5250, swd: 1.4321, ept: 42.2366
+    Epoch [24/50], Test Losses: mse: 15.4270, mae: 3.0501, huber: 2.5915, swd: 1.0343, ept: 42.7183
+      Epoch 24 composite train-obj: 2.741958
+            Val objective improved 3.2697 → 3.2411, saving checkpoint.
+    Epoch [25/50], Train Losses: mse: 13.4526, mae: 2.8306, huber: 2.3761, swd: 0.7089, ept: 44.8576
+    Epoch [25/50], Val Losses: mse: 13.9492, mae: 2.9500, huber: 2.4896, swd: 1.4738, ept: 42.6535
+    Epoch [25/50], Test Losses: mse: 15.3851, mae: 3.0500, huber: 2.5915, swd: 1.0725, ept: 43.5841
+      Epoch 25 composite train-obj: 2.730581
+            Val objective improved 3.2411 → 3.2265, saving checkpoint.
+    Epoch [26/50], Train Losses: mse: 13.3543, mae: 2.8236, huber: 2.3693, swd: 0.6971, ept: 45.2528
+    Epoch [26/50], Val Losses: mse: 14.0501, mae: 2.9667, huber: 2.5054, swd: 1.3635, ept: 42.8191
+    Epoch [26/50], Test Losses: mse: 15.1901, mae: 3.0332, huber: 2.5742, swd: 1.0356, ept: 43.9132
+      Epoch 26 composite train-obj: 2.717866
+            Val objective improved 3.2265 → 3.1872, saving checkpoint.
+    Epoch [27/50], Train Losses: mse: 13.2808, mae: 2.8193, huber: 2.3650, swd: 0.6863, ept: 45.5131
+    Epoch [27/50], Val Losses: mse: 13.8947, mae: 2.9532, huber: 2.4925, swd: 1.3741, ept: 42.2717
+    Epoch [27/50], Test Losses: mse: 15.2322, mae: 3.0377, huber: 2.5795, swd: 0.9886, ept: 43.3216
+      Epoch 27 composite train-obj: 2.708145
+            Val objective improved 3.1872 → 3.1796, saving checkpoint.
+    Epoch [28/50], Train Losses: mse: 13.2087, mae: 2.8142, huber: 2.3602, swd: 0.6755, ept: 45.6018
+    Epoch [28/50], Val Losses: mse: 13.8437, mae: 2.9493, huber: 2.4884, swd: 1.3522, ept: 42.6009
+    Epoch [28/50], Test Losses: mse: 15.2608, mae: 3.0404, huber: 2.5820, swd: 1.0014, ept: 43.7750
+      Epoch 28 composite train-obj: 2.697949
+            Val objective improved 3.1796 → 3.1645, saving checkpoint.
+    Epoch [29/50], Train Losses: mse: 13.1427, mae: 2.8097, huber: 2.3557, swd: 0.6683, ept: 45.9707
+    Epoch [29/50], Val Losses: mse: 13.6058, mae: 2.9263, huber: 2.4659, swd: 1.3863, ept: 42.6963
+    Epoch [29/50], Test Losses: mse: 15.1002, mae: 3.0317, huber: 2.5733, swd: 1.0163, ept: 43.5437
+      Epoch 29 composite train-obj: 2.689897
+            Val objective improved 3.1645 → 3.1591, saving checkpoint.
+    Epoch [30/50], Train Losses: mse: 13.0838, mae: 2.8060, huber: 2.3519, swd: 0.6612, ept: 46.0904
+    Epoch [30/50], Val Losses: mse: 13.7450, mae: 2.9389, huber: 2.4786, swd: 1.3070, ept: 42.7615
+    Epoch [30/50], Test Losses: mse: 14.9849, mae: 3.0197, huber: 2.5617, swd: 0.9711, ept: 43.5822
+      Epoch 30 composite train-obj: 2.682536
+            Val objective improved 3.1591 → 3.1321, saving checkpoint.
+    Epoch [31/50], Train Losses: mse: 13.0182, mae: 2.8008, huber: 2.3469, swd: 0.6499, ept: 46.1705
+    Epoch [31/50], Val Losses: mse: 13.4294, mae: 2.9100, huber: 2.4499, swd: 1.3350, ept: 43.8805
+    Epoch [31/50], Test Losses: mse: 14.8246, mae: 3.0051, huber: 2.5472, swd: 0.9854, ept: 44.9992
+      Epoch 31 composite train-obj: 2.671831
+            Val objective improved 3.1321 → 3.1174, saving checkpoint.
+    Epoch [32/50], Train Losses: mse: 12.9804, mae: 2.7973, huber: 2.3436, swd: 0.6478, ept: 46.4593
+    Epoch [32/50], Val Losses: mse: 13.4790, mae: 2.9166, huber: 2.4560, swd: 1.2590, ept: 43.6495
+    Epoch [32/50], Test Losses: mse: 14.9378, mae: 3.0182, huber: 2.5598, swd: 0.9832, ept: 44.8696
+      Epoch 32 composite train-obj: 2.667480
+            Val objective improved 3.1174 → 3.0855, saving checkpoint.
+    Epoch [33/50], Train Losses: mse: 12.9409, mae: 2.7938, huber: 2.3401, swd: 0.6394, ept: 46.7125
+    Epoch [33/50], Val Losses: mse: 13.4039, mae: 2.9129, huber: 2.4520, swd: 1.2546, ept: 43.2339
+    Epoch [33/50], Test Losses: mse: 14.9176, mae: 3.0096, huber: 2.5517, swd: 0.9879, ept: 44.9922
+      Epoch 33 composite train-obj: 2.659838
+            Val objective improved 3.0855 → 3.0794, saving checkpoint.
+    Epoch [34/50], Train Losses: mse: 12.9184, mae: 2.7913, huber: 2.3377, swd: 0.6339, ept: 46.7305
+    Epoch [34/50], Val Losses: mse: 13.4641, mae: 2.9128, huber: 2.4522, swd: 1.2454, ept: 42.6913
+    Epoch [34/50], Test Losses: mse: 14.8981, mae: 3.0158, huber: 2.5572, swd: 0.9899, ept: 44.1889
+      Epoch 34 composite train-obj: 2.654653
+            Val objective improved 3.0794 → 3.0749, saving checkpoint.
+    Epoch [35/50], Train Losses: mse: 12.9015, mae: 2.7896, huber: 2.3360, swd: 0.6312, ept: 46.8326
+    Epoch [35/50], Val Losses: mse: 13.4394, mae: 2.9151, huber: 2.4546, swd: 1.2285, ept: 43.2115
+    Epoch [35/50], Test Losses: mse: 14.8043, mae: 2.9986, huber: 2.5408, swd: 0.9842, ept: 44.8385
+      Epoch 35 composite train-obj: 2.651587
+            Val objective improved 3.0749 → 3.0688, saving checkpoint.
+    Epoch [36/50], Train Losses: mse: 12.8789, mae: 2.7874, huber: 2.3338, swd: 0.6251, ept: 47.0086
+    Epoch [36/50], Val Losses: mse: 13.3187, mae: 2.8966, huber: 2.4363, swd: 1.1985, ept: 44.1903
+    Epoch [36/50], Test Losses: mse: 14.8393, mae: 3.0022, huber: 2.5444, swd: 0.9264, ept: 45.1072
+      Epoch 36 composite train-obj: 2.646381
+            Val objective improved 3.0688 → 3.0356, saving checkpoint.
+    Epoch [37/50], Train Losses: mse: 12.8693, mae: 2.7852, huber: 2.3318, swd: 0.6233, ept: 47.1612
+    Epoch [37/50], Val Losses: mse: 13.5756, mae: 2.9218, huber: 2.4617, swd: 1.1965, ept: 42.8124
+    Epoch [37/50], Test Losses: mse: 14.9385, mae: 3.0099, huber: 2.5522, swd: 0.9210, ept: 44.4084
+      Epoch 37 composite train-obj: 2.643451
+            No improvement (3.0600), counter 1/5
+    Epoch [38/50], Train Losses: mse: 12.8596, mae: 2.7832, huber: 2.3299, swd: 0.6225, ept: 47.3129
+    Epoch [38/50], Val Losses: mse: 13.2549, mae: 2.8863, huber: 2.4266, swd: 1.1573, ept: 44.4598
+    Epoch [38/50], Test Losses: mse: 14.7151, mae: 2.9890, huber: 2.5316, swd: 0.9804, ept: 45.6561
+      Epoch 38 composite train-obj: 2.641120
+            Val objective improved 3.0356 → 3.0053, saving checkpoint.
+    Epoch [39/50], Train Losses: mse: 12.8490, mae: 2.7818, huber: 2.3285, swd: 0.6182, ept: 47.2758
+    Epoch [39/50], Val Losses: mse: 13.2419, mae: 2.8803, huber: 2.4211, swd: 1.1887, ept: 44.1811
+    Epoch [39/50], Test Losses: mse: 14.8394, mae: 3.0017, huber: 2.5446, swd: 0.9394, ept: 44.8804
+      Epoch 39 composite train-obj: 2.637595
+            No improvement (3.0155), counter 1/5
+    Epoch [40/50], Train Losses: mse: 12.8438, mae: 2.7796, huber: 2.3265, swd: 0.6134, ept: 47.6201
+    Epoch [40/50], Val Losses: mse: 13.1782, mae: 2.8750, huber: 2.4151, swd: 1.1441, ept: 44.1768
+    Epoch [40/50], Test Losses: mse: 14.8782, mae: 3.0062, huber: 2.5483, swd: 0.9144, ept: 45.9523
+      Epoch 40 composite train-obj: 2.633214
+            Val objective improved 3.0053 → 2.9872, saving checkpoint.
+    Epoch [41/50], Train Losses: mse: 12.8370, mae: 2.7783, huber: 2.3251, swd: 0.6092, ept: 47.6624
+    Epoch [41/50], Val Losses: mse: 13.4630, mae: 2.9023, huber: 2.4419, swd: 1.1261, ept: 44.3514
+    Epoch [41/50], Test Losses: mse: 14.8605, mae: 3.0041, huber: 2.5458, swd: 0.9147, ept: 45.6944
+      Epoch 41 composite train-obj: 2.629729
+            No improvement (3.0050), counter 1/5
+    Epoch [42/50], Train Losses: mse: 12.8411, mae: 2.7780, huber: 2.3248, swd: 0.6136, ept: 47.7572
+    Epoch [42/50], Val Losses: mse: 13.3095, mae: 2.8856, huber: 2.4262, swd: 1.1275, ept: 44.3522
+    Epoch [42/50], Test Losses: mse: 14.7922, mae: 2.9899, huber: 2.5326, swd: 0.8646, ept: 45.8378
+      Epoch 42 composite train-obj: 2.631588
+            No improvement (2.9899), counter 2/5
+    Epoch [43/50], Train Losses: mse: 12.8437, mae: 2.7764, huber: 2.3233, swd: 0.6101, ept: 47.8339
+    Epoch [43/50], Val Losses: mse: 13.2756, mae: 2.8802, huber: 2.4214, swd: 1.1711, ept: 44.9617
+    Epoch [43/50], Test Losses: mse: 14.7401, mae: 2.9900, huber: 2.5326, swd: 0.9310, ept: 47.2653
+      Epoch 43 composite train-obj: 2.628336
+            No improvement (3.0070), counter 3/5
+    Epoch [44/50], Train Losses: mse: 12.8288, mae: 2.7742, huber: 2.3213, swd: 0.6045, ept: 47.9857
+    Epoch [44/50], Val Losses: mse: 13.3613, mae: 2.8880, huber: 2.4284, swd: 1.1884, ept: 44.2735
+    Epoch [44/50], Test Losses: mse: 14.7968, mae: 2.9916, huber: 2.5340, swd: 0.9554, ept: 46.1262
+      Epoch 44 composite train-obj: 2.623601
+            No improvement (3.0226), counter 4/5
+    Epoch [45/50], Train Losses: mse: 12.8362, mae: 2.7736, huber: 2.3207, swd: 0.6075, ept: 48.1445
+    Epoch [45/50], Val Losses: mse: 13.4999, mae: 2.8993, huber: 2.4395, swd: 1.1368, ept: 43.7982
+    Epoch [45/50], Test Losses: mse: 14.9414, mae: 3.0046, huber: 2.5467, swd: 0.9208, ept: 45.2281
+      Epoch 45 composite train-obj: 2.624432
+    Epoch [45/50], Test Losses: mse: 14.8782, mae: 3.0062, huber: 2.5483, swd: 0.9144, ept: 45.9523
+    Best round's Test MSE: 14.8782, MAE: 3.0062, SWD: 0.9144
+    Best round's Validation MSE: 13.1782, MAE: 2.8750, SWD: 1.1441
+    Best round's Test verification MSE : 14.8782, MAE: 3.0062, SWD: 0.9144
+    Time taken: 59.65 seconds
+    
+    ==================================================
+     Running experiment with seed 20 (3/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 18.8311, mae: 3.4549, huber: 2.9862, swd: 1.2984, ept: 10.6223
+    Epoch [1/50], Val Losses: mse: 18.0239, mae: 3.4097, huber: 2.9403, swd: 2.4246, ept: 20.4339
+    Epoch [1/50], Test Losses: mse: 18.4236, mae: 3.4106, huber: 2.9430, swd: 1.4656, ept: 20.5917
+      Epoch 1 composite train-obj: 3.635371
+            Val objective improved inf → 4.1526, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 16.1040, mae: 3.1614, huber: 2.6981, swd: 1.0622, ept: 25.8582
+    Epoch [2/50], Val Losses: mse: 17.6172, mae: 3.3475, huber: 2.8806, swd: 2.3149, ept: 27.9890
+    Epoch [2/50], Test Losses: mse: 18.0177, mae: 3.3562, huber: 2.8905, swd: 1.4156, ept: 27.7306
+      Epoch 2 composite train-obj: 3.229216
+            Val objective improved 4.1526 → 4.0380, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 15.7245, mae: 3.1092, huber: 2.6481, swd: 1.0221, ept: 30.6206
+    Epoch [3/50], Val Losses: mse: 17.1578, mae: 3.2997, huber: 2.8346, swd: 2.2242, ept: 31.4094
+    Epoch [3/50], Test Losses: mse: 17.7349, mae: 3.3167, huber: 2.8531, swd: 1.3632, ept: 31.2795
+      Epoch 3 composite train-obj: 3.159135
+            Val objective improved 4.0380 → 3.9467, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 15.5063, mae: 3.0804, huber: 2.6204, swd: 0.9954, ept: 32.7898
+    Epoch [4/50], Val Losses: mse: 17.1374, mae: 3.2911, huber: 2.8267, swd: 2.1944, ept: 32.5525
+    Epoch [4/50], Test Losses: mse: 17.6570, mae: 3.3069, huber: 2.8438, swd: 1.3277, ept: 32.1937
+      Epoch 4 composite train-obj: 3.118057
+            Val objective improved 3.9467 → 3.9239, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 15.3338, mae: 3.0591, huber: 2.5998, swd: 0.9813, ept: 33.8082
+    Epoch [5/50], Val Losses: mse: 16.7594, mae: 3.2529, huber: 2.7890, swd: 2.2158, ept: 33.8184
+    Epoch [5/50], Test Losses: mse: 17.4305, mae: 3.2839, huber: 2.8212, swd: 1.3415, ept: 33.2821
+      Epoch 5 composite train-obj: 3.090472
+            Val objective improved 3.9239 → 3.8969, saving checkpoint.
+    Epoch [6/50], Train Losses: mse: 15.1697, mae: 3.0396, huber: 2.5809, swd: 0.9616, ept: 34.8810
+    Epoch [6/50], Val Losses: mse: 16.4879, mae: 3.2248, huber: 2.7614, swd: 2.0894, ept: 34.6863
+    Epoch [6/50], Test Losses: mse: 17.2998, mae: 3.2659, huber: 2.8038, swd: 1.2978, ept: 34.2639
+      Epoch 6 composite train-obj: 3.061681
+            Val objective improved 3.8969 → 3.8061, saving checkpoint.
+    Epoch [7/50], Train Losses: mse: 15.0240, mae: 3.0229, huber: 2.5648, swd: 0.9424, ept: 35.5298
+    Epoch [7/50], Val Losses: mse: 16.3973, mae: 3.2095, huber: 2.7465, swd: 2.0802, ept: 35.0555
+    Epoch [7/50], Test Losses: mse: 17.2506, mae: 3.2614, huber: 2.7992, swd: 1.2985, ept: 34.4828
+      Epoch 7 composite train-obj: 3.035980
+            Val objective improved 3.8061 → 3.7866, saving checkpoint.
+    Epoch [8/50], Train Losses: mse: 14.8708, mae: 3.0055, huber: 2.5478, swd: 0.9236, ept: 35.9021
+    Epoch [8/50], Val Losses: mse: 16.3256, mae: 3.2073, huber: 2.7441, swd: 2.0419, ept: 35.4100
+    Epoch [8/50], Test Losses: mse: 17.0164, mae: 3.2361, huber: 2.7745, swd: 1.2759, ept: 34.9895
+      Epoch 8 composite train-obj: 3.009636
+            Val objective improved 3.7866 → 3.7651, saving checkpoint.
+    Epoch [9/50], Train Losses: mse: 14.7416, mae: 2.9900, huber: 2.5328, swd: 0.9031, ept: 36.6874
+    Epoch [9/50], Val Losses: mse: 16.0091, mae: 3.1775, huber: 2.7151, swd: 2.0231, ept: 35.9523
+    Epoch [9/50], Test Losses: mse: 16.8410, mae: 3.2118, huber: 2.7509, swd: 1.2892, ept: 35.9732
+      Epoch 9 composite train-obj: 2.984323
+            Val objective improved 3.7651 → 3.7266, saving checkpoint.
+    Epoch [10/50], Train Losses: mse: 14.6348, mae: 2.9778, huber: 2.5207, swd: 0.8920, ept: 36.9010
+    Epoch [10/50], Val Losses: mse: 15.8297, mae: 3.1584, huber: 2.6958, swd: 2.0146, ept: 36.2792
+    Epoch [10/50], Test Losses: mse: 16.8259, mae: 3.2130, huber: 2.7517, swd: 1.2613, ept: 35.4650
+      Epoch 10 composite train-obj: 2.966664
+            Val objective improved 3.7266 → 3.7031, saving checkpoint.
+    Epoch [11/50], Train Losses: mse: 14.5372, mae: 2.9642, huber: 2.5074, swd: 0.8729, ept: 37.3147
+    Epoch [11/50], Val Losses: mse: 15.8412, mae: 3.1554, huber: 2.6931, swd: 1.9249, ept: 36.7396
+    Epoch [11/50], Test Losses: mse: 16.7469, mae: 3.2009, huber: 2.7397, swd: 1.2034, ept: 36.2142
+      Epoch 11 composite train-obj: 2.943887
+            Val objective improved 3.7031 → 3.6555, saving checkpoint.
+    Epoch [12/50], Train Losses: mse: 14.4345, mae: 2.9506, huber: 2.4942, swd: 0.8547, ept: 37.7489
+    Epoch [12/50], Val Losses: mse: 15.6583, mae: 3.1341, huber: 2.6723, swd: 1.8331, ept: 36.5205
+    Epoch [12/50], Test Losses: mse: 16.5780, mae: 3.1848, huber: 2.7240, swd: 1.1763, ept: 35.9651
+      Epoch 12 composite train-obj: 2.921552
+            Val objective improved 3.6555 → 3.5888, saving checkpoint.
+    Epoch [13/50], Train Losses: mse: 14.3499, mae: 2.9404, huber: 2.4840, swd: 0.8404, ept: 38.1596
+    Epoch [13/50], Val Losses: mse: 15.5244, mae: 3.1224, huber: 2.6601, swd: 1.8188, ept: 37.0181
+    Epoch [13/50], Test Losses: mse: 16.5242, mae: 3.1734, huber: 2.7131, swd: 1.1462, ept: 36.4470
+      Epoch 13 composite train-obj: 2.904235
+            Val objective improved 3.5888 → 3.5695, saving checkpoint.
+    Epoch [14/50], Train Losses: mse: 14.2618, mae: 2.9289, huber: 2.4726, swd: 0.8281, ept: 38.3943
+    Epoch [14/50], Val Losses: mse: 15.2174, mae: 3.0910, huber: 2.6291, swd: 1.7617, ept: 37.2261
+    Epoch [14/50], Test Losses: mse: 16.3140, mae: 3.1534, huber: 2.6930, swd: 1.1244, ept: 36.9281
+      Epoch 14 composite train-obj: 2.886699
+            Val objective improved 3.5695 → 3.5099, saving checkpoint.
+    Epoch [15/50], Train Losses: mse: 14.1599, mae: 2.9165, huber: 2.4606, swd: 0.8059, ept: 38.7984
+    Epoch [15/50], Val Losses: mse: 15.0794, mae: 3.0731, huber: 2.6115, swd: 1.7207, ept: 37.7269
+    Epoch [15/50], Test Losses: mse: 16.2754, mae: 3.1485, huber: 2.6886, swd: 1.0994, ept: 37.7381
+      Epoch 15 composite train-obj: 2.863487
+            Val objective improved 3.5099 → 3.4719, saving checkpoint.
+    Epoch [16/50], Train Losses: mse: 14.0812, mae: 2.9072, huber: 2.4514, swd: 0.7917, ept: 39.1519
+    Epoch [16/50], Val Losses: mse: 15.0473, mae: 3.0742, huber: 2.6124, swd: 1.7186, ept: 37.7133
+    Epoch [16/50], Test Losses: mse: 16.1087, mae: 3.1294, huber: 2.6695, swd: 1.0950, ept: 37.4845
+      Epoch 16 composite train-obj: 2.847254
+            Val objective improved 3.4719 → 3.4717, saving checkpoint.
+    Epoch [17/50], Train Losses: mse: 13.9876, mae: 2.8979, huber: 2.4422, swd: 0.7780, ept: 39.4331
+    Epoch [17/50], Val Losses: mse: 14.8491, mae: 3.0485, huber: 2.5875, swd: 1.6690, ept: 38.7339
+    Epoch [17/50], Test Losses: mse: 16.0972, mae: 3.1266, huber: 2.6670, swd: 1.0699, ept: 38.2766
+      Epoch 17 composite train-obj: 2.831202
+            Val objective improved 3.4717 → 3.4220, saving checkpoint.
+    Epoch [18/50], Train Losses: mse: 13.8917, mae: 2.8883, huber: 2.4328, swd: 0.7636, ept: 39.6148
+    Epoch [18/50], Val Losses: mse: 14.7071, mae: 3.0413, huber: 2.5798, swd: 1.6035, ept: 38.9194
+    Epoch [18/50], Test Losses: mse: 15.9638, mae: 3.1164, huber: 2.6567, swd: 1.0668, ept: 38.9746
+      Epoch 18 composite train-obj: 2.814543
+            Val objective improved 3.4220 → 3.3816, saving checkpoint.
+    Epoch [19/50], Train Losses: mse: 13.8103, mae: 2.8801, huber: 2.4247, swd: 0.7491, ept: 39.8589
+    Epoch [19/50], Val Losses: mse: 14.6452, mae: 3.0327, huber: 2.5714, swd: 1.5614, ept: 38.5154
+    Epoch [19/50], Test Losses: mse: 15.7827, mae: 3.0950, huber: 2.6357, swd: 1.0259, ept: 38.8013
+      Epoch 19 composite train-obj: 2.799282
+            Val objective improved 3.3816 → 3.3521, saving checkpoint.
+    Epoch [20/50], Train Losses: mse: 13.7181, mae: 2.8714, huber: 2.4161, swd: 0.7317, ept: 40.1669
+    Epoch [20/50], Val Losses: mse: 14.3932, mae: 3.0072, huber: 2.5460, swd: 1.5293, ept: 39.0182
+    Epoch [20/50], Test Losses: mse: 15.8863, mae: 3.1083, huber: 2.6490, swd: 1.0262, ept: 39.1536
+      Epoch 20 composite train-obj: 2.781927
+            Val objective improved 3.3521 → 3.3107, saving checkpoint.
+    Epoch [21/50], Train Losses: mse: 13.6366, mae: 2.8640, huber: 2.4088, swd: 0.7229, ept: 40.4819
+    Epoch [21/50], Val Losses: mse: 14.3380, mae: 3.0081, huber: 2.5464, swd: 1.4997, ept: 39.1137
+    Epoch [21/50], Test Losses: mse: 15.6446, mae: 3.0869, huber: 2.6275, swd: 1.0061, ept: 39.6280
+      Epoch 21 composite train-obj: 2.770252
+            Val objective improved 3.3107 → 3.2962, saving checkpoint.
+    Epoch [22/50], Train Losses: mse: 13.5645, mae: 2.8582, huber: 2.4030, swd: 0.7110, ept: 40.7372
+    Epoch [22/50], Val Losses: mse: 14.0414, mae: 2.9757, huber: 2.5148, swd: 1.4280, ept: 39.3447
+    Epoch [22/50], Test Losses: mse: 15.5562, mae: 3.0776, huber: 2.6186, swd: 0.9893, ept: 40.1697
+      Epoch 22 composite train-obj: 2.758444
+            Val objective improved 3.2962 → 3.2288, saving checkpoint.
+    Epoch [23/50], Train Losses: mse: 13.4886, mae: 2.8520, huber: 2.3969, swd: 0.6958, ept: 40.7639
+    Epoch [23/50], Val Losses: mse: 13.9977, mae: 2.9741, huber: 2.5127, swd: 1.3858, ept: 39.6434
+    Epoch [23/50], Test Losses: mse: 15.6226, mae: 3.0851, huber: 2.6257, swd: 0.9778, ept: 39.7794
+      Epoch 23 composite train-obj: 2.744737
+            Val objective improved 3.2288 → 3.2056, saving checkpoint.
+    Epoch [24/50], Train Losses: mse: 13.4094, mae: 2.8442, huber: 2.3893, swd: 0.6835, ept: 40.9791
+    Epoch [24/50], Val Losses: mse: 14.0246, mae: 2.9760, huber: 2.5141, swd: 1.3612, ept: 39.0912
+    Epoch [24/50], Test Losses: mse: 15.5937, mae: 3.0853, huber: 2.6257, swd: 0.9574, ept: 39.4972
+      Epoch 24 composite train-obj: 2.731070
+            Val objective improved 3.2056 → 3.1947, saving checkpoint.
+    Epoch [25/50], Train Losses: mse: 13.3424, mae: 2.8394, huber: 2.3845, swd: 0.6755, ept: 41.1658
+    Epoch [25/50], Val Losses: mse: 14.1239, mae: 2.9901, huber: 2.5285, swd: 1.3796, ept: 39.8946
+    Epoch [25/50], Test Losses: mse: 15.4002, mae: 3.0662, huber: 2.6067, swd: 0.9308, ept: 39.3661
+      Epoch 25 composite train-obj: 2.722244
+            No improvement (3.2183), counter 1/5
+    Epoch [26/50], Train Losses: mse: 13.2724, mae: 2.8330, huber: 2.3783, swd: 0.6602, ept: 41.5222
+    Epoch [26/50], Val Losses: mse: 13.9022, mae: 2.9675, huber: 2.5063, swd: 1.3229, ept: 39.8269
+    Epoch [26/50], Test Losses: mse: 15.2662, mae: 3.0539, huber: 2.5949, swd: 0.9148, ept: 40.4486
+      Epoch 26 composite train-obj: 2.708354
+            Val objective improved 3.1947 → 3.1677, saving checkpoint.
+    Epoch [27/50], Train Losses: mse: 13.2093, mae: 2.8283, huber: 2.3735, swd: 0.6542, ept: 41.7323
+    Epoch [27/50], Val Losses: mse: 13.6822, mae: 2.9409, huber: 2.4803, swd: 1.2914, ept: 40.2976
+    Epoch [27/50], Test Losses: mse: 15.2565, mae: 3.0547, huber: 2.5959, swd: 0.9446, ept: 39.8440
+      Epoch 27 composite train-obj: 2.700647
+            Val objective improved 3.1677 → 3.1260, saving checkpoint.
+    Epoch [28/50], Train Losses: mse: 13.1633, mae: 2.8245, huber: 2.3699, swd: 0.6455, ept: 41.8605
+    Epoch [28/50], Val Losses: mse: 13.6229, mae: 2.9371, huber: 2.4767, swd: 1.2763, ept: 40.4843
+    Epoch [28/50], Test Losses: mse: 15.1659, mae: 3.0437, huber: 2.5856, swd: 0.8896, ept: 41.3458
+      Epoch 28 composite train-obj: 2.692583
+            Val objective improved 3.1260 → 3.1149, saving checkpoint.
+    Epoch [29/50], Train Losses: mse: 13.1063, mae: 2.8199, huber: 2.3653, swd: 0.6410, ept: 42.2188
+    Epoch [29/50], Val Losses: mse: 13.7232, mae: 2.9552, huber: 2.4941, swd: 1.2876, ept: 40.0201
+    Epoch [29/50], Test Losses: mse: 15.0908, mae: 3.0418, huber: 2.5832, swd: 0.9384, ept: 41.0683
+      Epoch 29 composite train-obj: 2.685853
+            No improvement (3.1379), counter 1/5
+    Epoch [30/50], Train Losses: mse: 13.0614, mae: 2.8160, huber: 2.3615, swd: 0.6301, ept: 42.4882
+    Epoch [30/50], Val Losses: mse: 13.5541, mae: 2.9304, huber: 2.4698, swd: 1.2196, ept: 40.7309
+    Epoch [30/50], Test Losses: mse: 15.0496, mae: 3.0392, huber: 2.5805, swd: 0.9200, ept: 41.0591
+      Epoch 30 composite train-obj: 2.676550
+            Val objective improved 3.1149 → 3.0795, saving checkpoint.
+    Epoch [31/50], Train Losses: mse: 13.0172, mae: 2.8124, huber: 2.3579, swd: 0.6242, ept: 42.7823
+    Epoch [31/50], Val Losses: mse: 13.4040, mae: 2.9201, huber: 2.4594, swd: 1.1962, ept: 41.1032
+    Epoch [31/50], Test Losses: mse: 14.9938, mae: 3.0309, huber: 2.5724, swd: 0.8754, ept: 41.6731
+      Epoch 31 composite train-obj: 2.670034
+            Val objective improved 3.0795 → 3.0575, saving checkpoint.
+    Epoch [32/50], Train Losses: mse: 12.9826, mae: 2.8092, huber: 2.3548, swd: 0.6153, ept: 43.2144
+    Epoch [32/50], Val Losses: mse: 13.4854, mae: 2.9277, huber: 2.4667, swd: 1.1584, ept: 40.5996
+    Epoch [32/50], Test Losses: mse: 15.0359, mae: 3.0347, huber: 2.5763, swd: 0.8741, ept: 41.4652
+      Epoch 32 composite train-obj: 2.662426
+            Val objective improved 3.0575 → 3.0460, saving checkpoint.
+    Epoch [33/50], Train Losses: mse: 12.9574, mae: 2.8060, huber: 2.3519, swd: 0.6107, ept: 43.5076
+    Epoch [33/50], Val Losses: mse: 13.3563, mae: 2.9185, huber: 2.4584, swd: 1.1637, ept: 41.2895
+    Epoch [33/50], Test Losses: mse: 14.8426, mae: 3.0116, huber: 2.5540, swd: 0.8836, ept: 42.5321
+      Epoch 33 composite train-obj: 2.657208
+            Val objective improved 3.0460 → 3.0402, saving checkpoint.
+    Epoch [34/50], Train Losses: mse: 12.9222, mae: 2.8035, huber: 2.3493, swd: 0.6061, ept: 43.6260
+    Epoch [34/50], Val Losses: mse: 13.4578, mae: 2.9237, huber: 2.4634, swd: 1.1680, ept: 41.3165
+    Epoch [34/50], Test Losses: mse: 15.0546, mae: 3.0360, huber: 2.5778, swd: 0.8841, ept: 41.6614
+      Epoch 34 composite train-obj: 2.652370
+            No improvement (3.0474), counter 1/5
+    Epoch [35/50], Train Losses: mse: 12.9017, mae: 2.8008, huber: 2.3468, swd: 0.6033, ept: 43.8452
+    Epoch [35/50], Val Losses: mse: 13.2612, mae: 2.9038, huber: 2.4438, swd: 1.1336, ept: 41.5341
+    Epoch [35/50], Test Losses: mse: 14.9333, mae: 3.0282, huber: 2.5697, swd: 0.8619, ept: 42.3698
+      Epoch 35 composite train-obj: 2.648434
+            Val objective improved 3.0402 → 3.0106, saving checkpoint.
+    Epoch [36/50], Train Losses: mse: 12.8879, mae: 2.7989, huber: 2.3449, swd: 0.5995, ept: 43.9192
+    Epoch [36/50], Val Losses: mse: 13.2392, mae: 2.9047, huber: 2.4440, swd: 1.1346, ept: 41.0951
+    Epoch [36/50], Test Losses: mse: 14.8152, mae: 3.0136, huber: 2.5553, swd: 0.8716, ept: 42.1625
+      Epoch 36 composite train-obj: 2.644670
+            No improvement (3.0113), counter 1/5
+    Epoch [37/50], Train Losses: mse: 12.8683, mae: 2.7969, huber: 2.3430, swd: 0.5962, ept: 44.1427
+    Epoch [37/50], Val Losses: mse: 13.3891, mae: 2.9162, huber: 2.4560, swd: 1.1466, ept: 41.1974
+    Epoch [37/50], Test Losses: mse: 14.8572, mae: 3.0160, huber: 2.5581, swd: 0.9012, ept: 42.4418
+      Epoch 37 composite train-obj: 2.641138
+            No improvement (3.0293), counter 2/5
+    Epoch [38/50], Train Losses: mse: 12.8490, mae: 2.7947, huber: 2.3409, swd: 0.5915, ept: 44.2799
+    Epoch [38/50], Val Losses: mse: 12.9840, mae: 2.8733, huber: 2.4137, swd: 1.0811, ept: 41.6065
+    Epoch [38/50], Test Losses: mse: 14.8443, mae: 3.0124, huber: 2.5544, swd: 0.8367, ept: 42.8298
+      Epoch 38 composite train-obj: 2.636621
+            Val objective improved 3.0106 → 2.9542, saving checkpoint.
+    Epoch [39/50], Train Losses: mse: 12.8336, mae: 2.7930, huber: 2.3392, swd: 0.5873, ept: 44.3019
+    Epoch [39/50], Val Losses: mse: 13.0736, mae: 2.8888, huber: 2.4282, swd: 1.0709, ept: 41.7726
+    Epoch [39/50], Test Losses: mse: 14.7851, mae: 3.0116, huber: 2.5532, swd: 0.8788, ept: 42.7095
+      Epoch 39 composite train-obj: 2.632866
+            No improvement (2.9637), counter 1/5
+    Epoch [40/50], Train Losses: mse: 12.8380, mae: 2.7931, huber: 2.3393, swd: 0.5901, ept: 44.5140
+    Epoch [40/50], Val Losses: mse: 13.3107, mae: 2.9087, huber: 2.4488, swd: 1.1095, ept: 41.8906
+    Epoch [40/50], Test Losses: mse: 14.7981, mae: 3.0113, huber: 2.5536, swd: 0.8598, ept: 42.4095
+      Epoch 40 composite train-obj: 2.634421
+            No improvement (3.0035), counter 2/5
+    Epoch [41/50], Train Losses: mse: 12.8145, mae: 2.7903, huber: 2.3368, swd: 0.5842, ept: 44.5862
+    Epoch [41/50], Val Losses: mse: 13.2586, mae: 2.9026, huber: 2.4429, swd: 1.0617, ept: 41.4265
+    Epoch [41/50], Test Losses: mse: 14.8550, mae: 3.0142, huber: 2.5568, swd: 0.8541, ept: 42.9680
+      Epoch 41 composite train-obj: 2.628918
+            No improvement (2.9737), counter 3/5
+    Epoch [42/50], Train Losses: mse: 12.8062, mae: 2.7889, huber: 2.3354, swd: 0.5847, ept: 44.6813
+    Epoch [42/50], Val Losses: mse: 13.1518, mae: 2.8955, huber: 2.4354, swd: 1.0596, ept: 41.9351
+    Epoch [42/50], Test Losses: mse: 14.8059, mae: 3.0107, huber: 2.5530, swd: 0.8651, ept: 43.2440
+      Epoch 42 composite train-obj: 2.627733
+            No improvement (2.9652), counter 4/5
+    Epoch [43/50], Train Losses: mse: 12.8009, mae: 2.7884, huber: 2.3349, swd: 0.5789, ept: 44.7848
+    Epoch [43/50], Val Losses: mse: 13.3632, mae: 2.9095, huber: 2.4502, swd: 1.0643, ept: 41.1762
+    Epoch [43/50], Test Losses: mse: 14.8349, mae: 3.0130, huber: 2.5555, swd: 0.8392, ept: 42.3219
+      Epoch 43 composite train-obj: 2.624360
+    Epoch [43/50], Test Losses: mse: 14.8443, mae: 3.0124, huber: 2.5544, swd: 0.8367, ept: 42.8298
+    Best round's Test MSE: 14.8443, MAE: 3.0124, SWD: 0.8367
+    Best round's Validation MSE: 12.9840, MAE: 2.8733, SWD: 1.0811
+    Best round's Test verification MSE : 14.8443, MAE: 3.0124, SWD: 0.8367
+    Time taken: 64.04 seconds
+    
+    ==================================================
+    Experiment Summary (DLinear_lorenz96_seq336_pred336_20250512_2350)
+    ==================================================
+    Number of runs: 3
+    Seeds: [1955, 7, 20]
+    
+    Test Performance at Best Validation (mean ± std):
+      mse: 14.7941 ± 0.0960
+      mae: 3.0047 ± 0.0070
+      huber: 2.5470 ± 0.0066
+      swd: 0.8662 ± 0.0344
+      ept: 44.6593 ± 1.3300
+      count: 10.0000 ± 0.0000
+    
+    Corresponding Validation Performance (mean ± std):
+      mse: 13.0497 ± 0.0909
+      mae: 2.8740 ± 0.0007
+      huber: 2.4144 ± 0.0006
+      swd: 1.0938 ± 0.0370
+      ept: 43.1130 ± 1.0950
+      count: 10.0000 ± 0.0000
+    ==================================================
+    Three seeds Time taken: 176.76 seconds
+    
+    Experiment complete: DLinear_lorenz96_seq336_pred336_20250512_2350
+    Model: DLinear
+    Dataset: lorenz96
+    Sequence Length: 336
+    Prediction Length: 336
+    Seeds: [1955, 7, 20]
+    
+
+#### pred=720
+
+
+```python
+importlib.reload(monotonic)
+importlib.reload(train_config)
+utils.reload_modules([utils])
+cfg = train_config.FlatDLinearConfig(
+    seq_len=336,
+    pred_len=720,
+    channels=data_mgr.datasets['lorenz96']['channels'],
+    batch_size=128,
+    learning_rate=9e-4,
+    seeds=[1955, 7, 20],
+    epochs=50, 
+)
+exp = execute_model_evaluation('lorenz96', cfg, data_mgr, scale=False)
+```
+
+    Reloading modules...
+      Reloaded: utils
+    Module reload complete.
+    Shape of training data: torch.Size([13300, 6])
+    Shape of validation data: torch.Size([1900, 6])
+    Shape of testing data: torch.Size([3800, 6])
+    global_std.shape: torch.Size([6])
+    Global Std for lorenz96: tensor([3.6750, 3.6678, 3.7240, 3.7347, 3.8038, 3.5588], device='cuda:0')
+    Train set sample shapes: torch.Size([336, 6]), torch.Size([720, 6])
+    Validation set sample shapes: torch.Size([336, 6]), torch.Size([720, 6])
+    Test set data shapes: torch.Size([3800, 6]), torch.Size([3800, 6])
+    Number of batches in train_loader: 96
+    Batch 0: Data shape torch.Size([128, 336, 6]), Target shape torch.Size([128, 720, 6])
+    
+    ==================================================
+    Data Preparation: lorenz96
+    ==================================================
+    Sequence Length: 336
+    Prediction Length: 720
+    Batch Size: 128
+    Scaling: No
+    Train Split: 0.7
+    Val Split: 0.8
+    Training Batches: 96
+    Validation Batches: 7
+    Test Batches: 22
+    ==================================================
+    
+    ==================================================
+     Running experiment with seed 1955 (1/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 14.2698, mae: 3.0455, huber: 2.5800, swd: 4.5480, ept: 40.7938
+    Epoch [1/50], Val Losses: mse: 14.9448, mae: 3.1277, huber: 2.6603, swd: 4.6197, ept: 56.0437
+    Epoch [1/50], Test Losses: mse: 15.6384, mae: 3.1908, huber: 2.7242, swd: 4.6436, ept: 54.4181
+      Epoch 1 composite train-obj: 2.579997
+            Val objective improved inf → 2.6603, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 13.4200, mae: 2.9429, huber: 2.4799, swd: 4.3985, ept: 60.8400
+    Epoch [2/50], Val Losses: mse: 14.8864, mae: 3.1192, huber: 2.6527, swd: 4.4410, ept: 57.7153
+    Epoch [2/50], Test Losses: mse: 15.5177, mae: 3.1715, huber: 2.7063, swd: 4.4563, ept: 59.2208
+      Epoch 2 composite train-obj: 2.479907
+            Val objective improved 2.6603 → 2.6527, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 13.2957, mae: 2.9240, huber: 2.4621, swd: 4.2584, ept: 63.7765
+    Epoch [3/50], Val Losses: mse: 14.5350, mae: 3.0802, huber: 2.6142, swd: 4.3626, ept: 62.7370
+    Epoch [3/50], Test Losses: mse: 15.5619, mae: 3.1751, huber: 2.7101, swd: 4.3299, ept: 60.8430
+      Epoch 3 composite train-obj: 2.462102
+            Val objective improved 2.6527 → 2.6142, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 13.1921, mae: 2.9100, huber: 2.4489, swd: 4.1537, ept: 65.3478
+    Epoch [4/50], Val Losses: mse: 14.4146, mae: 3.0630, huber: 2.5976, swd: 4.2540, ept: 61.4853
+    Epoch [4/50], Test Losses: mse: 15.4851, mae: 3.1646, huber: 2.6999, swd: 4.1873, ept: 61.6136
+      Epoch 4 composite train-obj: 2.448873
+            Val objective improved 2.6142 → 2.5976, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 13.1180, mae: 2.8998, huber: 2.4391, swd: 4.0628, ept: 66.2243
+    Epoch [5/50], Val Losses: mse: 14.3009, mae: 3.0498, huber: 2.5851, swd: 4.1850, ept: 64.9964
+    Epoch [5/50], Test Losses: mse: 15.3824, mae: 3.1528, huber: 2.6884, swd: 4.1260, ept: 61.7118
+      Epoch 5 composite train-obj: 2.439147
+            Val objective improved 2.5976 → 2.5851, saving checkpoint.
+    Epoch [6/50], Train Losses: mse: 13.0492, mae: 2.8910, huber: 2.4308, swd: 3.9857, ept: 67.2296
+    Epoch [6/50], Val Losses: mse: 14.2181, mae: 3.0389, huber: 2.5747, swd: 4.1797, ept: 64.2007
+    Epoch [6/50], Test Losses: mse: 15.2529, mae: 3.1425, huber: 2.6785, swd: 4.1275, ept: 61.1616
+      Epoch 6 composite train-obj: 2.430752
+            Val objective improved 2.5851 → 2.5747, saving checkpoint.
+    Epoch [7/50], Train Losses: mse: 13.0004, mae: 2.8849, huber: 2.4248, swd: 3.9003, ept: 67.7053
+    Epoch [7/50], Val Losses: mse: 14.2707, mae: 3.0522, huber: 2.5875, swd: 4.1790, ept: 62.8617
+    Epoch [7/50], Test Losses: mse: 15.2218, mae: 3.1411, huber: 2.6769, swd: 4.0836, ept: 64.3680
+      Epoch 7 composite train-obj: 2.424846
+            No improvement (2.5875), counter 1/5
+    Epoch [8/50], Train Losses: mse: 12.9326, mae: 2.8765, huber: 2.4169, swd: 3.8395, ept: 68.4854
+    Epoch [8/50], Val Losses: mse: 14.1589, mae: 3.0373, huber: 2.5733, swd: 4.2014, ept: 60.8735
+    Epoch [8/50], Test Losses: mse: 15.1159, mae: 3.1248, huber: 2.6615, swd: 4.0827, ept: 63.0931
+      Epoch 8 composite train-obj: 2.416850
+            Val objective improved 2.5747 → 2.5733, saving checkpoint.
+    Epoch [9/50], Train Losses: mse: 12.8772, mae: 2.8700, huber: 2.4105, swd: 3.7779, ept: 68.7010
+    Epoch [9/50], Val Losses: mse: 14.0439, mae: 3.0289, huber: 2.5643, swd: 4.1578, ept: 66.8571
+    Epoch [9/50], Test Losses: mse: 15.1793, mae: 3.1367, huber: 2.6726, swd: 4.0435, ept: 64.6686
+      Epoch 9 composite train-obj: 2.410523
+            Val objective improved 2.5733 → 2.5643, saving checkpoint.
+    Epoch [10/50], Train Losses: mse: 12.8172, mae: 2.8631, huber: 2.4038, swd: 3.7298, ept: 68.9874
+    Epoch [10/50], Val Losses: mse: 13.8482, mae: 3.0032, huber: 2.5399, swd: 3.9767, ept: 64.2103
+    Epoch [10/50], Test Losses: mse: 15.0748, mae: 3.1209, huber: 2.6572, swd: 3.8392, ept: 64.2331
+      Epoch 10 composite train-obj: 2.403793
+            Val objective improved 2.5643 → 2.5399, saving checkpoint.
+    Epoch [11/50], Train Losses: mse: 12.7780, mae: 2.8582, huber: 2.3991, swd: 3.6552, ept: 69.2921
+    Epoch [11/50], Val Losses: mse: 14.0965, mae: 3.0298, huber: 2.5656, swd: 4.0804, ept: 65.3721
+    Epoch [11/50], Test Losses: mse: 15.0937, mae: 3.1279, huber: 2.6641, swd: 3.9287, ept: 64.1035
+      Epoch 11 composite train-obj: 2.399133
+            No improvement (2.5656), counter 1/5
+    Epoch [12/50], Train Losses: mse: 12.7374, mae: 2.8534, huber: 2.3945, swd: 3.6148, ept: 69.5320
+    Epoch [12/50], Val Losses: mse: 13.9534, mae: 3.0183, huber: 2.5543, swd: 4.0099, ept: 67.1918
+    Epoch [12/50], Test Losses: mse: 15.0365, mae: 3.1183, huber: 2.6549, swd: 3.8507, ept: 63.5415
+      Epoch 12 composite train-obj: 2.394458
+            No improvement (2.5543), counter 2/5
+    Epoch [13/50], Train Losses: mse: 12.7054, mae: 2.8490, huber: 2.3902, swd: 3.5512, ept: 69.9559
+    Epoch [13/50], Val Losses: mse: 13.7997, mae: 2.9992, huber: 2.5354, swd: 3.9980, ept: 67.1808
+    Epoch [13/50], Test Losses: mse: 15.0756, mae: 3.1242, huber: 2.6606, swd: 3.8431, ept: 63.1212
+      Epoch 13 composite train-obj: 2.390154
+            Val objective improved 2.5399 → 2.5354, saving checkpoint.
+    Epoch [14/50], Train Losses: mse: 12.6521, mae: 2.8435, huber: 2.3848, swd: 3.5128, ept: 70.0560
+    Epoch [14/50], Val Losses: mse: 13.7128, mae: 2.9844, huber: 2.5215, swd: 3.8911, ept: 68.5045
+    Epoch [14/50], Test Losses: mse: 15.0354, mae: 3.1160, huber: 2.6532, swd: 3.6997, ept: 63.9308
+      Epoch 14 composite train-obj: 2.384764
+            Val objective improved 2.5354 → 2.5215, saving checkpoint.
+    Epoch [15/50], Train Losses: mse: 12.6338, mae: 2.8407, huber: 2.3822, swd: 3.4628, ept: 70.4607
+    Epoch [15/50], Val Losses: mse: 13.5550, mae: 2.9766, huber: 2.5132, swd: 3.9177, ept: 65.4542
+    Epoch [15/50], Test Losses: mse: 14.9873, mae: 3.1157, huber: 2.6524, swd: 3.7304, ept: 64.7274
+      Epoch 15 composite train-obj: 2.382161
+            Val objective improved 2.5215 → 2.5132, saving checkpoint.
+    Epoch [16/50], Train Losses: mse: 12.5912, mae: 2.8358, huber: 2.3773, swd: 3.4209, ept: 70.4978
+    Epoch [16/50], Val Losses: mse: 13.7386, mae: 2.9894, huber: 2.5260, swd: 4.0327, ept: 68.0189
+    Epoch [16/50], Test Losses: mse: 14.8840, mae: 3.1074, huber: 2.6441, swd: 3.8036, ept: 64.3765
+      Epoch 16 composite train-obj: 2.377312
+            No improvement (2.5260), counter 1/5
+    Epoch [17/50], Train Losses: mse: 12.5584, mae: 2.8318, huber: 2.3735, swd: 3.3824, ept: 70.7152
+    Epoch [17/50], Val Losses: mse: 13.4999, mae: 2.9659, huber: 2.5031, swd: 3.9107, ept: 67.6676
+    Epoch [17/50], Test Losses: mse: 14.8319, mae: 3.0968, huber: 2.6339, swd: 3.7018, ept: 64.6942
+      Epoch 17 composite train-obj: 2.373477
+            Val objective improved 2.5132 → 2.5031, saving checkpoint.
+    Epoch [18/50], Train Losses: mse: 12.5406, mae: 2.8294, huber: 2.3711, swd: 3.3300, ept: 70.7004
+    Epoch [18/50], Val Losses: mse: 13.5780, mae: 2.9695, huber: 2.5071, swd: 3.8551, ept: 68.2201
+    Epoch [18/50], Test Losses: mse: 14.7885, mae: 3.0934, huber: 2.6306, swd: 3.6407, ept: 63.9736
+      Epoch 18 composite train-obj: 2.371143
+            No improvement (2.5071), counter 1/5
+    Epoch [19/50], Train Losses: mse: 12.4990, mae: 2.8250, huber: 2.3668, swd: 3.3115, ept: 70.7734
+    Epoch [19/50], Val Losses: mse: 13.4769, mae: 2.9600, huber: 2.4975, swd: 3.9920, ept: 67.1248
+    Epoch [19/50], Test Losses: mse: 14.8925, mae: 3.1058, huber: 2.6426, swd: 3.7380, ept: 65.3402
+      Epoch 19 composite train-obj: 2.366821
+            Val objective improved 2.5031 → 2.4975, saving checkpoint.
+    Epoch [20/50], Train Losses: mse: 12.4929, mae: 2.8235, huber: 2.3654, swd: 3.2586, ept: 70.9983
+    Epoch [20/50], Val Losses: mse: 13.6290, mae: 2.9760, huber: 2.5133, swd: 3.8030, ept: 68.1242
+    Epoch [20/50], Test Losses: mse: 14.8188, mae: 3.0968, huber: 2.6338, swd: 3.5821, ept: 64.6691
+      Epoch 20 composite train-obj: 2.365422
+            No improvement (2.5133), counter 1/5
+    Epoch [21/50], Train Losses: mse: 12.4675, mae: 2.8207, huber: 2.3627, swd: 3.2251, ept: 71.1269
+    Epoch [21/50], Val Losses: mse: 13.4089, mae: 2.9558, huber: 2.4928, swd: 3.7164, ept: 68.2557
+    Epoch [21/50], Test Losses: mse: 14.7896, mae: 3.0902, huber: 2.6270, swd: 3.4619, ept: 65.2785
+      Epoch 21 composite train-obj: 2.362689
+            Val objective improved 2.4975 → 2.4928, saving checkpoint.
+    Epoch [22/50], Train Losses: mse: 12.4557, mae: 2.8191, huber: 2.3610, swd: 3.1799, ept: 71.2492
+    Epoch [22/50], Val Losses: mse: 13.5119, mae: 2.9642, huber: 2.5013, swd: 3.8231, ept: 67.4984
+    Epoch [22/50], Test Losses: mse: 14.8691, mae: 3.1012, huber: 2.6386, swd: 3.5540, ept: 65.5468
+      Epoch 22 composite train-obj: 2.361044
+            No improvement (2.5013), counter 1/5
+    Epoch [23/50], Train Losses: mse: 12.4347, mae: 2.8163, huber: 2.3584, swd: 3.1579, ept: 71.3621
+    Epoch [23/50], Val Losses: mse: 13.4786, mae: 2.9629, huber: 2.4998, swd: 3.6995, ept: 67.3186
+    Epoch [23/50], Test Losses: mse: 14.7626, mae: 3.0893, huber: 2.6265, swd: 3.4517, ept: 63.5209
+      Epoch 23 composite train-obj: 2.358351
+            No improvement (2.4998), counter 2/5
+    Epoch [24/50], Train Losses: mse: 12.4100, mae: 2.8134, huber: 2.3556, swd: 3.1332, ept: 71.3709
+    Epoch [24/50], Val Losses: mse: 13.4940, mae: 2.9670, huber: 2.5043, swd: 3.8284, ept: 66.7453
+    Epoch [24/50], Test Losses: mse: 14.7607, mae: 3.0875, huber: 2.6248, swd: 3.5337, ept: 63.7247
+      Epoch 24 composite train-obj: 2.355623
+            No improvement (2.5043), counter 3/5
+    Epoch [25/50], Train Losses: mse: 12.3944, mae: 2.8113, huber: 2.3535, swd: 3.1088, ept: 71.3949
+    Epoch [25/50], Val Losses: mse: 13.4842, mae: 2.9642, huber: 2.5015, swd: 3.7932, ept: 69.8277
+    Epoch [25/50], Test Losses: mse: 14.6340, mae: 3.0775, huber: 2.6149, swd: 3.5371, ept: 63.7654
+      Epoch 25 composite train-obj: 2.353528
+            No improvement (2.5015), counter 4/5
+    Epoch [26/50], Train Losses: mse: 12.3785, mae: 2.8094, huber: 2.3517, swd: 3.0811, ept: 71.5236
+    Epoch [26/50], Val Losses: mse: 13.4905, mae: 2.9628, huber: 2.5004, swd: 3.6138, ept: 69.0460
+    Epoch [26/50], Test Losses: mse: 14.7616, mae: 3.0874, huber: 2.6249, swd: 3.3097, ept: 66.3041
+      Epoch 26 composite train-obj: 2.351729
+    Epoch [26/50], Test Losses: mse: 14.7896, mae: 3.0902, huber: 2.6270, swd: 3.4619, ept: 65.2785
+    Best round's Test MSE: 14.7896, MAE: 3.0902, SWD: 3.4619
+    Best round's Validation MSE: 13.4089, MAE: 2.9558, SWD: 3.7164
+    Best round's Test verification MSE : 14.7896, MAE: 3.0902, SWD: 3.4619
+    Time taken: 30.44 seconds
+    
+    ==================================================
+     Running experiment with seed 7 (2/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 14.2693, mae: 3.0453, huber: 2.5798, swd: 4.4497, ept: 40.8347
+    Epoch [1/50], Val Losses: mse: 14.8606, mae: 3.1196, huber: 2.6522, swd: 4.7900, ept: 54.4734
+    Epoch [1/50], Test Losses: mse: 15.6536, mae: 3.1955, huber: 2.7285, swd: 4.7769, ept: 55.0195
+      Epoch 1 composite train-obj: 2.579797
+            Val objective improved inf → 2.6522, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 13.4194, mae: 2.9427, huber: 2.4798, swd: 4.3363, ept: 60.3488
+    Epoch [2/50], Val Losses: mse: 14.7737, mae: 3.1094, huber: 2.6426, swd: 4.6378, ept: 60.2505
+    Epoch [2/50], Test Losses: mse: 15.5562, mae: 3.1795, huber: 2.7134, swd: 4.5168, ept: 59.4510
+      Epoch 2 composite train-obj: 2.479768
+            Val objective improved 2.6522 → 2.6426, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 13.3009, mae: 2.9242, huber: 2.4624, swd: 4.1830, ept: 63.6203
+    Epoch [3/50], Val Losses: mse: 14.6839, mae: 3.0974, huber: 2.6318, swd: 4.4397, ept: 59.1772
+    Epoch [3/50], Test Losses: mse: 15.4532, mae: 3.1630, huber: 2.6978, swd: 4.3273, ept: 61.0001
+      Epoch 3 composite train-obj: 2.462357
+            Val objective improved 2.6426 → 2.6318, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 13.1971, mae: 2.9110, huber: 2.4498, swd: 4.0969, ept: 65.4608
+    Epoch [4/50], Val Losses: mse: 14.5250, mae: 3.0821, huber: 2.6165, swd: 4.3563, ept: 61.9469
+    Epoch [4/50], Test Losses: mse: 15.4865, mae: 3.1661, huber: 2.7011, swd: 4.2375, ept: 60.8984
+      Epoch 4 composite train-obj: 2.449811
+            Val objective improved 2.6318 → 2.6165, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 13.1233, mae: 2.9005, huber: 2.4399, swd: 4.0012, ept: 66.1663
+    Epoch [5/50], Val Losses: mse: 14.3708, mae: 3.0568, huber: 2.5923, swd: 4.3827, ept: 64.2875
+    Epoch [5/50], Test Losses: mse: 15.3250, mae: 3.1509, huber: 2.6864, swd: 4.2386, ept: 62.2319
+      Epoch 5 composite train-obj: 2.439900
+            Val objective improved 2.6165 → 2.5923, saving checkpoint.
+    Epoch [6/50], Train Losses: mse: 13.0604, mae: 2.8926, huber: 2.4323, swd: 3.9319, ept: 66.9637
+    Epoch [6/50], Val Losses: mse: 14.2860, mae: 3.0505, huber: 2.5859, swd: 4.1881, ept: 65.5071
+    Epoch [6/50], Test Losses: mse: 15.3171, mae: 3.1471, huber: 2.6827, swd: 4.0391, ept: 62.1125
+      Epoch 6 composite train-obj: 2.432275
+            Val objective improved 2.5923 → 2.5859, saving checkpoint.
+    Epoch [7/50], Train Losses: mse: 12.9872, mae: 2.8836, huber: 2.4236, swd: 3.8636, ept: 68.0697
+    Epoch [7/50], Val Losses: mse: 14.1873, mae: 3.0385, huber: 2.5740, swd: 4.2211, ept: 65.1363
+    Epoch [7/50], Test Losses: mse: 15.3690, mae: 3.1583, huber: 2.6937, swd: 4.0874, ept: 62.0196
+      Epoch 7 composite train-obj: 2.423627
+            Val objective improved 2.5859 → 2.5740, saving checkpoint.
+    Epoch [8/50], Train Losses: mse: 12.9339, mae: 2.8766, huber: 2.4170, swd: 3.7973, ept: 68.2799
+    Epoch [8/50], Val Losses: mse: 14.1482, mae: 3.0362, huber: 2.5716, swd: 4.2746, ept: 62.7798
+    Epoch [8/50], Test Losses: mse: 15.2635, mae: 3.1468, huber: 2.6824, swd: 4.0910, ept: 63.0709
+      Epoch 8 composite train-obj: 2.416964
+            Val objective improved 2.5740 → 2.5716, saving checkpoint.
+    Epoch [9/50], Train Losses: mse: 12.8726, mae: 2.8696, huber: 2.4101, swd: 3.7464, ept: 68.6577
+    Epoch [9/50], Val Losses: mse: 13.9925, mae: 3.0222, huber: 2.5581, swd: 4.1877, ept: 66.4430
+    Epoch [9/50], Test Losses: mse: 15.0608, mae: 3.1222, huber: 2.6583, swd: 4.0157, ept: 63.0176
+      Epoch 9 composite train-obj: 2.410088
+            Val objective improved 2.5716 → 2.5581, saving checkpoint.
+    Epoch [10/50], Train Losses: mse: 12.8278, mae: 2.8644, huber: 2.4051, swd: 3.6916, ept: 68.9607
+    Epoch [10/50], Val Losses: mse: 13.9286, mae: 3.0156, huber: 2.5514, swd: 4.3384, ept: 68.1229
+    Epoch [10/50], Test Losses: mse: 15.2540, mae: 3.1432, huber: 2.6793, swd: 4.1034, ept: 63.0394
+      Epoch 10 composite train-obj: 2.405100
+            Val objective improved 2.5581 → 2.5514, saving checkpoint.
+    Epoch [11/50], Train Losses: mse: 12.7701, mae: 2.8566, huber: 2.3976, swd: 3.6437, ept: 69.4097
+    Epoch [11/50], Val Losses: mse: 13.9019, mae: 3.0044, huber: 2.5411, swd: 4.1135, ept: 65.2147
+    Epoch [11/50], Test Losses: mse: 15.0698, mae: 3.1235, huber: 2.6602, swd: 3.9443, ept: 63.8069
+      Epoch 11 composite train-obj: 2.397630
+            Val objective improved 2.5514 → 2.5411, saving checkpoint.
+    Epoch [12/50], Train Losses: mse: 12.7437, mae: 2.8540, huber: 2.3951, swd: 3.5916, ept: 69.6577
+    Epoch [12/50], Val Losses: mse: 13.9826, mae: 3.0144, huber: 2.5507, swd: 3.9683, ept: 64.6810
+    Epoch [12/50], Test Losses: mse: 15.0316, mae: 3.1176, huber: 2.6540, swd: 3.7417, ept: 63.4316
+      Epoch 12 composite train-obj: 2.395067
+            No improvement (2.5507), counter 1/5
+    Epoch [13/50], Train Losses: mse: 12.6896, mae: 2.8479, huber: 2.3890, swd: 3.5344, ept: 69.8373
+    Epoch [13/50], Val Losses: mse: 13.8423, mae: 2.9981, huber: 2.5351, swd: 4.0406, ept: 66.6739
+    Epoch [13/50], Test Losses: mse: 15.1513, mae: 3.1345, huber: 2.6710, swd: 3.8377, ept: 64.0603
+      Epoch 13 composite train-obj: 2.389004
+            Val objective improved 2.5411 → 2.5351, saving checkpoint.
+    Epoch [14/50], Train Losses: mse: 12.6553, mae: 2.8433, huber: 2.3847, swd: 3.4973, ept: 70.0169
+    Epoch [14/50], Val Losses: mse: 13.6316, mae: 2.9772, huber: 2.5145, swd: 4.1163, ept: 66.4318
+    Epoch [14/50], Test Losses: mse: 14.9613, mae: 3.1123, huber: 2.6493, swd: 3.8740, ept: 63.4776
+      Epoch 14 composite train-obj: 2.384682
+            Val objective improved 2.5351 → 2.5145, saving checkpoint.
+    Epoch [15/50], Train Losses: mse: 12.6214, mae: 2.8394, huber: 2.3809, swd: 3.4592, ept: 70.4430
+    Epoch [15/50], Val Losses: mse: 13.6651, mae: 2.9822, huber: 2.5193, swd: 3.9859, ept: 67.5519
+    Epoch [15/50], Test Losses: mse: 14.9157, mae: 3.1033, huber: 2.6405, swd: 3.7467, ept: 63.7356
+      Epoch 15 composite train-obj: 2.380869
+            No improvement (2.5193), counter 1/5
+    Epoch [16/50], Train Losses: mse: 12.5848, mae: 2.8350, huber: 2.3765, swd: 3.4157, ept: 70.5967
+    Epoch [16/50], Val Losses: mse: 13.5882, mae: 2.9760, huber: 2.5126, swd: 4.1660, ept: 65.8491
+    Epoch [16/50], Test Losses: mse: 14.8578, mae: 3.1003, huber: 2.6371, swd: 3.8799, ept: 64.1546
+      Epoch 16 composite train-obj: 2.376535
+            Val objective improved 2.5145 → 2.5126, saving checkpoint.
+    Epoch [17/50], Train Losses: mse: 12.5588, mae: 2.8320, huber: 2.3737, swd: 3.3746, ept: 70.6001
+    Epoch [17/50], Val Losses: mse: 13.5123, mae: 2.9686, huber: 2.5055, swd: 3.9150, ept: 65.0487
+    Epoch [17/50], Test Losses: mse: 15.0196, mae: 3.1140, huber: 2.6512, swd: 3.6625, ept: 63.7893
+      Epoch 17 composite train-obj: 2.373692
+            Val objective improved 2.5126 → 2.5055, saving checkpoint.
+    Epoch [18/50], Train Losses: mse: 12.5354, mae: 2.8287, huber: 2.3704, swd: 3.3216, ept: 70.7500
+    Epoch [18/50], Val Losses: mse: 13.5374, mae: 2.9681, huber: 2.5054, swd: 4.0125, ept: 66.6720
+    Epoch [18/50], Test Losses: mse: 14.8352, mae: 3.0991, huber: 2.6362, swd: 3.7597, ept: 64.5009
+      Epoch 18 composite train-obj: 2.370395
+            Val objective improved 2.5055 → 2.5054, saving checkpoint.
+    Epoch [19/50], Train Losses: mse: 12.5191, mae: 2.8272, huber: 2.3690, swd: 3.2978, ept: 70.8557
+    Epoch [19/50], Val Losses: mse: 13.6861, mae: 2.9847, huber: 2.5216, swd: 3.7399, ept: 67.4983
+    Epoch [19/50], Test Losses: mse: 14.8992, mae: 3.1023, huber: 2.6395, swd: 3.5199, ept: 65.2455
+      Epoch 19 composite train-obj: 2.368954
+            No improvement (2.5216), counter 1/5
+    Epoch [20/50], Train Losses: mse: 12.4941, mae: 2.8239, huber: 2.3658, swd: 3.2533, ept: 71.1058
+    Epoch [20/50], Val Losses: mse: 13.5482, mae: 2.9694, huber: 2.5065, swd: 3.9087, ept: 69.5328
+    Epoch [20/50], Test Losses: mse: 14.7488, mae: 3.0892, huber: 2.6262, swd: 3.6295, ept: 64.3417
+      Epoch 20 composite train-obj: 2.365782
+            No improvement (2.5065), counter 2/5
+    Epoch [21/50], Train Losses: mse: 12.4701, mae: 2.8207, huber: 2.3627, swd: 3.2256, ept: 71.3349
+    Epoch [21/50], Val Losses: mse: 13.5000, mae: 2.9658, huber: 2.5033, swd: 3.8483, ept: 68.5151
+    Epoch [21/50], Test Losses: mse: 14.7695, mae: 3.0908, huber: 2.6282, swd: 3.5720, ept: 64.5819
+      Epoch 21 composite train-obj: 2.362739
+            Val objective improved 2.5054 → 2.5033, saving checkpoint.
+    Epoch [22/50], Train Losses: mse: 12.4310, mae: 2.8160, huber: 2.3581, swd: 3.1968, ept: 71.4452
+    Epoch [22/50], Val Losses: mse: 13.4277, mae: 2.9609, huber: 2.4978, swd: 3.9217, ept: 69.7325
+    Epoch [22/50], Test Losses: mse: 14.6921, mae: 3.0854, huber: 2.6223, swd: 3.6631, ept: 63.4342
+      Epoch 22 composite train-obj: 2.358081
+            Val objective improved 2.5033 → 2.4978, saving checkpoint.
+    Epoch [23/50], Train Losses: mse: 12.4171, mae: 2.8145, huber: 2.3566, swd: 3.1734, ept: 71.2980
+    Epoch [23/50], Val Losses: mse: 13.3840, mae: 2.9514, huber: 2.4892, swd: 3.9041, ept: 64.1240
+    Epoch [23/50], Test Losses: mse: 14.7505, mae: 3.0871, huber: 2.6247, swd: 3.5967, ept: 65.1531
+      Epoch 23 composite train-obj: 2.356596
+            Val objective improved 2.4978 → 2.4892, saving checkpoint.
+    Epoch [24/50], Train Losses: mse: 12.4060, mae: 2.8130, huber: 2.3551, swd: 3.1377, ept: 71.5385
+    Epoch [24/50], Val Losses: mse: 13.5104, mae: 2.9665, huber: 2.5036, swd: 3.8207, ept: 69.3866
+    Epoch [24/50], Test Losses: mse: 14.7545, mae: 3.0877, huber: 2.6254, swd: 3.5276, ept: 63.9287
+      Epoch 24 composite train-obj: 2.355119
+            No improvement (2.5036), counter 1/5
+    Epoch [25/50], Train Losses: mse: 12.3979, mae: 2.8117, huber: 2.3539, swd: 3.1133, ept: 71.4218
+    Epoch [25/50], Val Losses: mse: 13.4164, mae: 2.9531, huber: 2.4907, swd: 3.6269, ept: 68.7409
+    Epoch [25/50], Test Losses: mse: 14.6333, mae: 3.0748, huber: 2.6123, swd: 3.3702, ept: 63.7967
+      Epoch 25 composite train-obj: 2.353913
+            No improvement (2.4907), counter 2/5
+    Epoch [26/50], Train Losses: mse: 12.3694, mae: 2.8087, huber: 2.3510, swd: 3.0871, ept: 71.6308
+    Epoch [26/50], Val Losses: mse: 13.4415, mae: 2.9598, huber: 2.4969, swd: 3.7450, ept: 68.1124
+    Epoch [26/50], Test Losses: mse: 14.7445, mae: 3.0874, huber: 2.6249, swd: 3.4632, ept: 64.5653
+      Epoch 26 composite train-obj: 2.351002
+            No improvement (2.4969), counter 3/5
+    Epoch [27/50], Train Losses: mse: 12.3751, mae: 2.8086, huber: 2.3509, swd: 3.0575, ept: 71.8246
+    Epoch [27/50], Val Losses: mse: 13.5867, mae: 2.9743, huber: 2.5116, swd: 3.7058, ept: 69.4643
+    Epoch [27/50], Test Losses: mse: 14.6378, mae: 3.0736, huber: 2.6110, swd: 3.4098, ept: 65.1233
+      Epoch 27 composite train-obj: 2.350938
+            No improvement (2.5116), counter 4/5
+    Epoch [28/50], Train Losses: mse: 12.3568, mae: 2.8065, huber: 2.3489, swd: 3.0357, ept: 71.6299
+    Epoch [28/50], Val Losses: mse: 13.3805, mae: 2.9499, huber: 2.4877, swd: 3.7074, ept: 70.9469
+    Epoch [28/50], Test Losses: mse: 14.6730, mae: 3.0797, huber: 2.6171, swd: 3.4107, ept: 64.8943
+      Epoch 28 composite train-obj: 2.348863
+            Val objective improved 2.4892 → 2.4877, saving checkpoint.
+    Epoch [29/50], Train Losses: mse: 12.3275, mae: 2.8026, huber: 2.3452, swd: 3.0194, ept: 71.9534
+    Epoch [29/50], Val Losses: mse: 13.3988, mae: 2.9558, huber: 2.4926, swd: 3.7907, ept: 69.8296
+    Epoch [29/50], Test Losses: mse: 14.6291, mae: 3.0774, huber: 2.6145, swd: 3.4584, ept: 65.2655
+      Epoch 29 composite train-obj: 2.345165
+            No improvement (2.4926), counter 1/5
+    Epoch [30/50], Train Losses: mse: 12.3342, mae: 2.8035, huber: 2.3460, swd: 2.9914, ept: 71.9924
+    Epoch [30/50], Val Losses: mse: 13.3971, mae: 2.9545, huber: 2.4912, swd: 3.7572, ept: 68.2366
+    Epoch [30/50], Test Losses: mse: 14.6424, mae: 3.0796, huber: 2.6172, swd: 3.4415, ept: 64.1205
+      Epoch 30 composite train-obj: 2.346002
+            No improvement (2.4912), counter 2/5
+    Epoch [31/50], Train Losses: mse: 12.3186, mae: 2.8012, huber: 2.3438, swd: 2.9670, ept: 71.9879
+    Epoch [31/50], Val Losses: mse: 13.4381, mae: 2.9650, huber: 2.5014, swd: 3.8001, ept: 68.6307
+    Epoch [31/50], Test Losses: mse: 14.6356, mae: 3.0780, huber: 2.6151, swd: 3.4463, ept: 64.6787
+      Epoch 31 composite train-obj: 2.343793
+            No improvement (2.5014), counter 3/5
+    Epoch [32/50], Train Losses: mse: 12.3014, mae: 2.7994, huber: 2.3420, swd: 2.9568, ept: 72.2289
+    Epoch [32/50], Val Losses: mse: 13.4155, mae: 2.9570, huber: 2.4945, swd: 3.8183, ept: 70.3211
+    Epoch [32/50], Test Losses: mse: 14.5878, mae: 3.0700, huber: 2.6076, swd: 3.4563, ept: 64.9075
+      Epoch 32 composite train-obj: 2.341981
+            No improvement (2.4945), counter 4/5
+    Epoch [33/50], Train Losses: mse: 12.2996, mae: 2.7986, huber: 2.3413, swd: 2.9384, ept: 72.2401
+    Epoch [33/50], Val Losses: mse: 13.5372, mae: 2.9719, huber: 2.5094, swd: 3.6173, ept: 70.4896
+    Epoch [33/50], Test Losses: mse: 14.5930, mae: 3.0715, huber: 2.6091, swd: 3.3150, ept: 64.9135
+      Epoch 33 composite train-obj: 2.341285
+    Epoch [33/50], Test Losses: mse: 14.6730, mae: 3.0797, huber: 2.6171, swd: 3.4107, ept: 64.8943
+    Best round's Test MSE: 14.6730, MAE: 3.0797, SWD: 3.4107
+    Best round's Validation MSE: 13.3805, MAE: 2.9499, SWD: 3.7074
+    Best round's Test verification MSE : 14.6730, MAE: 3.0797, SWD: 3.4107
+    Time taken: 37.89 seconds
+    
+    ==================================================
+     Running experiment with seed 20 (3/3)==================================================
+    
+    Epoch [1/50], Train Losses: mse: 14.2651, mae: 3.0448, huber: 2.5793, swd: 4.5107, ept: 41.0292
+    Epoch [1/50], Val Losses: mse: 14.9777, mae: 3.1352, huber: 2.6675, swd: 4.6902, ept: 52.7855
+    Epoch [1/50], Test Losses: mse: 15.6768, mae: 3.1938, huber: 2.7273, swd: 4.5998, ept: 54.8456
+      Epoch 1 composite train-obj: 2.579323
+            Val objective improved inf → 2.6675, saving checkpoint.
+    Epoch [2/50], Train Losses: mse: 13.4078, mae: 2.9417, huber: 2.4788, swd: 4.3914, ept: 60.4593
+    Epoch [2/50], Val Losses: mse: 14.5721, mae: 3.0846, huber: 2.6179, swd: 4.6195, ept: 60.6046
+    Epoch [2/50], Test Losses: mse: 15.6157, mae: 3.1866, huber: 2.7207, swd: 4.5720, ept: 58.1015
+      Epoch 2 composite train-obj: 2.478809
+            Val objective improved 2.6675 → 2.6179, saving checkpoint.
+    Epoch [3/50], Train Losses: mse: 13.2968, mae: 2.9237, huber: 2.4619, swd: 4.2325, ept: 63.8940
+    Epoch [3/50], Val Losses: mse: 14.5868, mae: 3.0830, huber: 2.6177, swd: 4.3970, ept: 62.0370
+    Epoch [3/50], Test Losses: mse: 15.4307, mae: 3.1639, huber: 2.6986, swd: 4.3383, ept: 60.4073
+      Epoch 3 composite train-obj: 2.461926
+            Val objective improved 2.6179 → 2.6177, saving checkpoint.
+    Epoch [4/50], Train Losses: mse: 13.1968, mae: 2.9102, huber: 2.4491, swd: 4.1341, ept: 65.2989
+    Epoch [4/50], Val Losses: mse: 14.5344, mae: 3.0808, huber: 2.6159, swd: 4.4861, ept: 61.1412
+    Epoch [4/50], Test Losses: mse: 15.3828, mae: 3.1564, huber: 2.6919, swd: 4.3200, ept: 62.3035
+      Epoch 4 composite train-obj: 2.449094
+            Val objective improved 2.6177 → 2.6159, saving checkpoint.
+    Epoch [5/50], Train Losses: mse: 13.1169, mae: 2.8996, huber: 2.4390, swd: 4.0525, ept: 66.5098
+    Epoch [5/50], Val Losses: mse: 14.2149, mae: 3.0453, huber: 2.5807, swd: 4.2473, ept: 64.2941
+    Epoch [5/50], Test Losses: mse: 15.2551, mae: 3.1434, huber: 2.6789, swd: 4.1526, ept: 61.9283
+      Epoch 5 composite train-obj: 2.439013
+            Val objective improved 2.6159 → 2.5807, saving checkpoint.
+    Epoch [6/50], Train Losses: mse: 13.0428, mae: 2.8908, huber: 2.4305, swd: 3.9789, ept: 67.1804
+    Epoch [6/50], Val Losses: mse: 14.0219, mae: 3.0177, huber: 2.5542, swd: 4.2836, ept: 64.8326
+    Epoch [6/50], Test Losses: mse: 15.4259, mae: 3.1579, huber: 2.6941, swd: 4.0739, ept: 61.9581
+      Epoch 6 composite train-obj: 2.430530
+            Val objective improved 2.5807 → 2.5542, saving checkpoint.
+    Epoch [7/50], Train Losses: mse: 12.9880, mae: 2.8833, huber: 2.4234, swd: 3.9022, ept: 67.9047
+    Epoch [7/50], Val Losses: mse: 14.1005, mae: 3.0320, huber: 2.5675, swd: 4.2054, ept: 63.8120
+    Epoch [7/50], Test Losses: mse: 15.2266, mae: 3.1393, huber: 2.6751, swd: 4.0195, ept: 63.5321
+      Epoch 7 composite train-obj: 2.423390
+            No improvement (2.5675), counter 1/5
+    Epoch [8/50], Train Losses: mse: 12.9261, mae: 2.8760, huber: 2.4164, swd: 3.8435, ept: 68.3499
+    Epoch [8/50], Val Losses: mse: 13.8577, mae: 3.0037, huber: 2.5403, swd: 4.3154, ept: 66.8751
+    Epoch [8/50], Test Losses: mse: 15.2386, mae: 3.1420, huber: 2.6779, swd: 4.1084, ept: 63.8319
+      Epoch 8 composite train-obj: 2.416363
+            Val objective improved 2.5542 → 2.5403, saving checkpoint.
+    Epoch [9/50], Train Losses: mse: 12.8728, mae: 2.8698, huber: 2.4104, swd: 3.7914, ept: 68.6393
+    Epoch [9/50], Val Losses: mse: 14.1109, mae: 3.0230, huber: 2.5598, swd: 3.9230, ept: 64.2118
+    Epoch [9/50], Test Losses: mse: 15.2400, mae: 3.1348, huber: 2.6713, swd: 3.7340, ept: 62.7230
+      Epoch 9 composite train-obj: 2.410371
+            No improvement (2.5598), counter 1/5
+    Epoch [10/50], Train Losses: mse: 12.8220, mae: 2.8631, huber: 2.4038, swd: 3.7131, ept: 69.1313
+    Epoch [10/50], Val Losses: mse: 13.9607, mae: 3.0148, huber: 2.5509, swd: 4.2643, ept: 65.6212
+    Epoch [10/50], Test Losses: mse: 14.9825, mae: 3.1151, huber: 2.6514, swd: 4.0725, ept: 64.3372
+      Epoch 10 composite train-obj: 2.403850
+            No improvement (2.5509), counter 2/5
+    Epoch [11/50], Train Losses: mse: 12.7718, mae: 2.8577, huber: 2.3986, swd: 3.6818, ept: 69.2672
+    Epoch [11/50], Val Losses: mse: 13.8515, mae: 3.0007, huber: 2.5371, swd: 4.0371, ept: 66.1412
+    Epoch [11/50], Test Losses: mse: 15.1871, mae: 3.1370, huber: 2.6733, swd: 3.8169, ept: 65.1097
+      Epoch 11 composite train-obj: 2.398576
+            Val objective improved 2.5403 → 2.5371, saving checkpoint.
+    Epoch [12/50], Train Losses: mse: 12.7326, mae: 2.8527, huber: 2.3937, swd: 3.6148, ept: 69.7100
+    Epoch [12/50], Val Losses: mse: 13.7115, mae: 2.9895, huber: 2.5257, swd: 4.1673, ept: 71.9538
+    Epoch [12/50], Test Losses: mse: 14.9661, mae: 3.1109, huber: 2.6478, swd: 3.8942, ept: 64.3559
+      Epoch 12 composite train-obj: 2.393698
+            Val objective improved 2.5371 → 2.5257, saving checkpoint.
+    Epoch [13/50], Train Losses: mse: 12.6991, mae: 2.8487, huber: 2.3899, swd: 3.5689, ept: 69.8937
+    Epoch [13/50], Val Losses: mse: 13.7295, mae: 2.9891, huber: 2.5256, swd: 3.9105, ept: 62.8105
+    Epoch [13/50], Test Losses: mse: 15.0438, mae: 3.1221, huber: 2.6586, swd: 3.6802, ept: 64.6243
+      Epoch 13 composite train-obj: 2.389885
+            Val objective improved 2.5257 → 2.5256, saving checkpoint.
+    Epoch [14/50], Train Losses: mse: 12.6570, mae: 2.8439, huber: 2.3852, swd: 3.5273, ept: 70.1558
+    Epoch [14/50], Val Losses: mse: 13.6221, mae: 2.9748, huber: 2.5121, swd: 3.9134, ept: 66.7755
+    Epoch [14/50], Test Losses: mse: 14.9509, mae: 3.1071, huber: 2.6441, swd: 3.6839, ept: 63.7573
+      Epoch 14 composite train-obj: 2.385171
+            Val objective improved 2.5256 → 2.5121, saving checkpoint.
+    Epoch [15/50], Train Losses: mse: 12.6240, mae: 2.8397, huber: 2.3811, swd: 3.4755, ept: 70.3537
+    Epoch [15/50], Val Losses: mse: 13.7952, mae: 2.9889, huber: 2.5263, swd: 4.0647, ept: 67.3956
+    Epoch [15/50], Test Losses: mse: 14.9289, mae: 3.1096, huber: 2.6459, swd: 3.7810, ept: 64.7947
+      Epoch 15 composite train-obj: 2.381089
+            No improvement (2.5263), counter 1/5
+    Epoch [16/50], Train Losses: mse: 12.5809, mae: 2.8342, huber: 2.3758, swd: 3.4385, ept: 70.5840
+    Epoch [16/50], Val Losses: mse: 13.6675, mae: 2.9754, huber: 2.5125, swd: 3.9168, ept: 65.4557
+    Epoch [16/50], Test Losses: mse: 15.0104, mae: 3.1159, huber: 2.6525, swd: 3.6266, ept: 64.1274
+      Epoch 16 composite train-obj: 2.375807
+            No improvement (2.5125), counter 2/5
+    Epoch [17/50], Train Losses: mse: 12.5655, mae: 2.8326, huber: 2.3743, swd: 3.3857, ept: 70.5568
+    Epoch [17/50], Val Losses: mse: 13.6520, mae: 2.9770, huber: 2.5144, swd: 3.9700, ept: 67.5585
+    Epoch [17/50], Test Losses: mse: 14.8996, mae: 3.1073, huber: 2.6444, swd: 3.6922, ept: 65.1225
+      Epoch 17 composite train-obj: 2.374251
+            No improvement (2.5144), counter 3/5
+    Epoch [18/50], Train Losses: mse: 12.5450, mae: 2.8295, huber: 2.3712, swd: 3.3553, ept: 70.7868
+    Epoch [18/50], Val Losses: mse: 13.7199, mae: 2.9853, huber: 2.5225, swd: 3.7373, ept: 65.1972
+    Epoch [18/50], Test Losses: mse: 14.7806, mae: 3.0890, huber: 2.6262, swd: 3.5154, ept: 63.8800
+      Epoch 18 composite train-obj: 2.371225
+            No improvement (2.5225), counter 4/5
+    Epoch [19/50], Train Losses: mse: 12.4997, mae: 2.8251, huber: 2.3668, swd: 3.3334, ept: 71.0052
+    Epoch [19/50], Val Losses: mse: 13.5744, mae: 2.9729, huber: 2.5097, swd: 3.8983, ept: 67.5029
+    Epoch [19/50], Test Losses: mse: 14.7277, mae: 3.0870, huber: 2.6243, swd: 3.5948, ept: 65.4759
+      Epoch 19 composite train-obj: 2.366843
+            Val objective improved 2.5121 → 2.5097, saving checkpoint.
+    Epoch [20/50], Train Losses: mse: 12.4899, mae: 2.8229, huber: 2.3649, swd: 3.2855, ept: 71.1998
+    Epoch [20/50], Val Losses: mse: 13.5477, mae: 2.9698, huber: 2.5064, swd: 3.7114, ept: 67.2779
+    Epoch [20/50], Test Losses: mse: 14.7643, mae: 3.0895, huber: 2.6268, swd: 3.4671, ept: 64.7158
+      Epoch 20 composite train-obj: 2.364863
+            Val objective improved 2.5097 → 2.5064, saving checkpoint.
+    Epoch [21/50], Train Losses: mse: 12.4708, mae: 2.8209, huber: 2.3628, swd: 3.2470, ept: 71.3951
+    Epoch [21/50], Val Losses: mse: 13.4030, mae: 2.9519, huber: 2.4898, swd: 3.8964, ept: 67.5068
+    Epoch [21/50], Test Losses: mse: 14.6674, mae: 3.0806, huber: 2.6180, swd: 3.5946, ept: 64.7393
+      Epoch 21 composite train-obj: 2.362820
+            Val objective improved 2.5064 → 2.4898, saving checkpoint.
+    Epoch [22/50], Train Losses: mse: 12.4435, mae: 2.8180, huber: 2.3600, swd: 3.2247, ept: 71.1422
+    Epoch [22/50], Val Losses: mse: 13.4488, mae: 2.9544, huber: 2.4920, swd: 3.7927, ept: 66.5672
+    Epoch [22/50], Test Losses: mse: 14.8405, mae: 3.0980, huber: 2.6352, swd: 3.5023, ept: 63.7563
+      Epoch 22 composite train-obj: 2.360028
+            No improvement (2.4920), counter 1/5
+    Epoch [23/50], Train Losses: mse: 12.4176, mae: 2.8150, huber: 2.3571, swd: 3.1951, ept: 71.4850
+    Epoch [23/50], Val Losses: mse: 13.3474, mae: 2.9469, huber: 2.4841, swd: 4.0528, ept: 68.5875
+    Epoch [23/50], Test Losses: mse: 14.7672, mae: 3.0920, huber: 2.6292, swd: 3.6819, ept: 64.9366
+      Epoch 23 composite train-obj: 2.357055
+            Val objective improved 2.4898 → 2.4841, saving checkpoint.
+    Epoch [24/50], Train Losses: mse: 12.4097, mae: 2.8132, huber: 2.3554, swd: 3.1580, ept: 71.3532
+    Epoch [24/50], Val Losses: mse: 13.5546, mae: 2.9670, huber: 2.5044, swd: 3.6669, ept: 68.4418
+    Epoch [24/50], Test Losses: mse: 14.7427, mae: 3.0862, huber: 2.6237, swd: 3.3742, ept: 64.4478
+      Epoch 24 composite train-obj: 2.355366
+            No improvement (2.5044), counter 1/5
+    Epoch [25/50], Train Losses: mse: 12.3982, mae: 2.8115, huber: 2.3537, swd: 3.1296, ept: 71.6451
+    Epoch [25/50], Val Losses: mse: 13.4738, mae: 2.9597, huber: 2.4971, swd: 3.8570, ept: 66.2280
+    Epoch [25/50], Test Losses: mse: 14.6816, mae: 3.0856, huber: 2.6228, swd: 3.5298, ept: 64.3211
+      Epoch 25 composite train-obj: 2.353690
+            No improvement (2.4971), counter 2/5
+    Epoch [26/50], Train Losses: mse: 12.3692, mae: 2.8086, huber: 2.3509, swd: 3.1184, ept: 71.8677
+    Epoch [26/50], Val Losses: mse: 13.4156, mae: 2.9583, huber: 2.4957, swd: 3.8853, ept: 69.5222
+    Epoch [26/50], Test Losses: mse: 14.8103, mae: 3.0970, huber: 2.6342, swd: 3.4959, ept: 63.6104
+      Epoch 26 composite train-obj: 2.350948
+            No improvement (2.4957), counter 3/5
+    Epoch [27/50], Train Losses: mse: 12.3574, mae: 2.8067, huber: 2.3490, swd: 3.0889, ept: 71.7609
+    Epoch [27/50], Val Losses: mse: 13.3915, mae: 2.9467, huber: 2.4844, swd: 3.7068, ept: 69.3845
+    Epoch [27/50], Test Losses: mse: 14.7140, mae: 3.0894, huber: 2.6263, swd: 3.3617, ept: 64.4256
+      Epoch 27 composite train-obj: 2.349031
+            No improvement (2.4844), counter 4/5
+    Epoch [28/50], Train Losses: mse: 12.3596, mae: 2.8067, huber: 2.3490, swd: 3.0518, ept: 71.7255
+    Epoch [28/50], Val Losses: mse: 13.3611, mae: 2.9526, huber: 2.4892, swd: 3.7109, ept: 69.4911
+    Epoch [28/50], Test Losses: mse: 14.8035, mae: 3.0935, huber: 2.6305, swd: 3.3383, ept: 64.5813
+      Epoch 28 composite train-obj: 2.349047
+    Epoch [28/50], Test Losses: mse: 14.7672, mae: 3.0920, huber: 2.6292, swd: 3.6819, ept: 64.9366
+    Best round's Test MSE: 14.7672, MAE: 3.0920, SWD: 3.6819
+    Best round's Validation MSE: 13.3474, MAE: 2.9469, SWD: 4.0528
+    Best round's Test verification MSE : 14.7672, MAE: 3.0920, SWD: 3.6819
+    Time taken: 30.16 seconds
+    
+    ==================================================
+    Experiment Summary (DLinear_lorenz96_seq336_pred720_20250512_2144)
+    ==================================================
+    Number of runs: 3
+    Seeds: [1955, 7, 20]
+    
+    Test Performance at Best Validation (mean ± std):
+      mse: 14.7433 ± 0.0505
+      mae: 3.0873 ± 0.0054
+      huber: 2.6244 ± 0.0053
+      swd: 3.5182 ± 0.1176
+      ept: 65.0364 ± 0.1720
+      count: 7.0000 ± 0.0000
+    
+    Corresponding Validation Performance (mean ± std):
+      mse: 13.3789 ± 0.0252
+      mae: 2.9509 ± 0.0037
+      huber: 2.4882 ± 0.0036
+      swd: 3.8255 ± 0.1608
+      ept: 69.2634 ± 1.1981
+      count: 7.0000 ± 0.0000
+    ==================================================
+    Three seeds Time taken: 98.56 seconds
+    
+    Experiment complete: DLinear_lorenz96_seq336_pred720_20250512_2144
+    Model: DLinear
+    Dataset: lorenz96
+    Sequence Length: 336
+    Prediction Length: 720
+    Seeds: [1955, 7, 20]
+    
+
+
+
+
+
+

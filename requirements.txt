@@ -1,0 +1,12 @@
+# 🚀 FRIREN Requirements - Python Dependencies
+# Ensure your Python environment is compatible (Python 3.8+ recommended)
+
+torch==2.7.0+cu128    # PyTorch with CUDA 12.8 
+numpy==2.1.2          # Core numerical computation library
+pandas==2.2.3         # Data manipulation and loading
+scikit-learn==1.6.1   # For StandardScaler in data preprocessing
+matplotlib==3.10.1    # Optional: For plotting 
+seaborn==0.13.2       # Optional: Enhanced visualizations 
+einops==0.8.1         # For flexible tensor rearrangement (used in model)
+scipy==1.15.2         # For numerical methods and support in models
+
